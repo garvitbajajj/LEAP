@@ -9,6 +9,7 @@ import Feed from './pages/Feed';
 import Item from './pages/Item';
 import Catalogue from './pages/Catalogue';
 import Path from './pages/Path';
+import Progress from './pages/Progress';
 
 /** Routes for each role. Learners are gated by consent, then onboarding. */
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/item/:id" element={<Item />} />
           <Route path="/catalogue" element={<Catalogue />} />
           {isLearner && <Route path="/path" element={<Path />} />}
+          {isLearner && <Route path="/progress" element={<Progress />} />}
           <Route path="/" element={isLearner ? <Feed /> : <div className="card"><h1>Welcome, {user.name}</h1><p className="muted">Staff console</p></div>} />
         </Routes>
       </main>
