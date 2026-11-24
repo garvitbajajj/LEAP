@@ -5,6 +5,7 @@ import { Spinner } from './components/ui';
 import Login from './pages/Login';
 import Consent from './pages/Consent';
 import Onboarding from './pages/Onboarding';
+import Feed from './pages/Feed';
 
 /** Routes for each role. Learners are gated by consent, then onboarding. */
 export default function App() {
@@ -24,7 +25,7 @@ export default function App() {
       <main className="shell">
         <Routes>
           <Route path="*" element={<Navigate to="/" replace />} />
-          <Route path="/" element={<div className="card"><h1>Welcome, {user.name}</h1><p className="muted">{isLearner ? `Goals: ${profile?.goals?.join(', ') || 'none yet'}` : 'Staff console'}</p></div>} />
+          <Route path="/" element={isLearner ? <Feed /> : <div className="card"><h1>Welcome, {user.name}</h1><p className="muted">Staff console</p></div>} />
         </Routes>
       </main>
     </>
