@@ -16,6 +16,7 @@ const CATALOGUE = require('./catalogue');
 const { QUIZZES } = require('./catalogue');
 const { GOALS } = require('../path/goals');
 const { topologicalOrder, findCycle } = require('../catalogue/graph');
+const { buildPath, refreshStatuses } = require('../path/sequencer');
 
 // Deterministic PRNG so every seed run produces the same demo.
 function mulberry32(seed) {
@@ -121,6 +122,19 @@ async function seed() {
   });
 
   await Interaction.insertMany(events);
+
+  // The demo learner opens on an existing path, as if they had onboarded in the UI.
+  const demoPath = buildPath({
+    goalSkills: GOALS['data-analyst'].skills,
+    items: docs,
+    completedIds: demoDone.map((k) => idByKey[k]),
+  });
+  const created = await LearningPath.create({
+    userId: learner._id, goalSkill: 'data-analyst', steps: demoPath.map((itemId) => ({ itemId })),
+  });
+  const path = await LearningPath.findById(created._id).populate('steps.itemId', 'prerequisites durationMins');
+  refreshStatuses(path);
+  await path.save();
 
   // ---------------------------------------------------------------- popularity prior
   const pop = await Interaction.aggregate([
