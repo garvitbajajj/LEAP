@@ -407,6 +407,35 @@ paths:
       responses:
         '200': { description: Retired }
         '409': { $ref: '#/components/responses/Error' }
+  /catalogue/items/{id}/attempt:
+    parameters: [{ $ref: '#/components/parameters/IdPath' }]
+    post:
+      tags: [Catalogue]
+      summary: Submit a quiz attempt for server-side grading
+      description: Answer keys never leave the server. Records a quiz_attempt (and a completion at 60%+) and updates BKT mastery.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers]
+              properties:
+                answers: { type: array, items: { type: integer }, example: [1, 2, 1, 1] }
+      responses:
+        '200':
+          description: Graded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  score: { type: number }
+                  correct: { type: integer }
+                  total: { type: integer }
+                  passed: { type: boolean }
+                  mastery: { type: array, items: { type: object } }
+        '404': { $ref: '#/components/responses/Error' }
   /catalogue/skills:
     get:
       tags: [Catalogue]

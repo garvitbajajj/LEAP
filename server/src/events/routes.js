@@ -2,6 +2,7 @@
  * C1 - interaction event ingestion. Each event is validated on its own, so one bad
  * event never fails the batch; replays are idempotent through the unique eventId.
  */
+const crypto = require('crypto');
 const express = require('express');
 const {
   Interaction, ContentItem, LearnerProfile, LearningPath,
@@ -74,6 +75,39 @@ router.post('/events', jwtAuth, requireConsent, ah(async (req, res) => {
   }
 
   res.status(202).json({ accepted: candidates.length, rejected });
+}));
+
+/**
+ * Server-side quiz grading. Answer keys never leave the server, so the client sends
+ * choices and the score is computed here, then recorded as a quiz_attempt (plus a
+ * completion when passed) through the same mastery and path updates as C1 events.
+ */
+const PASS_MARK = 0.6;
+
+router.post('/catalogue/items/:id/attempt', jwtAuth, requireConsent, ah(async (req, res) => {
+  const item = await ContentItem.findById(req.params.id).select('skills quiz title');
+  if (!item?.quiz?.length) throw new AppError(404, 'NOT_A_QUIZ', 'This item has no quiz');
+  const answers = req.body?.answers;
+  if (!Array.isArray(answers) || answers.length !== item.quiz.length) {
+    throw new AppError(400, 'VALIDATION_FAILED', `answers must be an array of ${item.quiz.length} choices`);
+  }
+
+  const results = item.quiz.map((q, i) => ({ correct: answers[i] === q.answerIndex, answerIndex: q.answerIndex }));
+  const correct = results.filter((r) => r.correct).length;
+  const score = +(correct / item.quiz.length).toFixed(3);
+  const passed = score >= PASS_MARK;
+
+  const now = new Date();
+  const events = [{ eventId: crypto.randomUUID(), itemId: String(item._id), type: 'quiz_attempt', score, timestamp: now }];
+  if (passed) events.push({ eventId: crypto.randomUUID(), itemId: String(item._id), type: 'complete', progressPct: 100, timestamp: now });
+  await Interaction.insertMany(events.map((e) => ({ ...e, userId: req.user.id })));
+  await applySideEffects(req.user.id, events, new Map([[String(item._id), item.skills]]));
+
+  const profile = await LearnerProfile.findOne({ userId: req.user.id }).select('mastery');
+  res.json({
+    score, correct, total: item.quiz.length, passed, results,
+    mastery: profile.mastery.filter((m) => item.skills.includes(m.skill)),
+  });
 }));
 
 /**
