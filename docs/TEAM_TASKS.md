@@ -112,7 +112,7 @@ These are cheap marks, and they're lost if only one person shows up in the histo
 - [ ] **Run Jenkins**: start it in Docker, install the plugins, add credentials, point it at the GitHub repo
 - [ ] Get the existing `Jenkinsfile` running green end to end, and screenshot each stage
 - [ ] **GitHub webhook → Jenkins** so every push triggers a build automatically
-- [ ] **`Jenkinsfile.multibranch`**: tests on every branch and PR, deploy only from `main`, a manual approval gate before production
+- [x] **`Jenkinsfile.multibranch`**: tests on every branch and PR, deploy only from `main`, a manual approval gate before production
 - [x] ALS matrix-factorisation collaborative filtering, replacing item-item CF in `ml/app/model.py`
 - [ ] Redis caching of the feed, invalidated when the profile changes
 
@@ -161,7 +161,7 @@ For **each** of practicals 1–10, in your own lab file:
 | 7 / 8 | K8s network, volumes, pods | Taher | ⬜ |
 | 9 | Jira sprints and workflows | Garvit (all use it) | 🟡 epics only |
 | 10 | Jenkins build and deploy jobs | Abhishek | 🟡 Jenkinsfile written |
-| 11 | Jenkins multibranch pipeline | Abhishek | ⬜ |
+| 11 | Jenkins multibranch pipeline | Abhishek | 🟡 Jenkinsfile.multibranch written |
 | 12 | Selenium browser automation | Dhruvika | ⬜ |
 | 13 | Maven Java build | Dhruvika | ⬜ |
 | 14 | Unit tests in Java and Python | Dhruvika (Java) · Abhishek (Python) | 🟡 Python done (65 tests) |
