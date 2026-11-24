@@ -54,4 +54,27 @@ async function getTopology() {
   }
 }
 
-module.exports = { connect, isUp, getTopology, mongoose };
+/**
+ * Runs `fn(session)` inside a MongoDB ACID transaction when connected to a
+ * replica set or sharded cluster. Falls back to `fn(null)` on standalone
+ * MongoDB instances or when disconnected.
+ */
+async function withTransaction(fn) {
+  if (!isUp()) return fn(null);
+  const topology = await getTopology();
+  if (topology.mode !== 'replicaSet' && topology.mode !== 'sharded') {
+    return fn(null);
+  }
+  const session = await mongoose.startSession();
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      result = await fn(session);
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
+}
+
+module.exports = { connect, isUp, getTopology, withTransaction, mongoose };

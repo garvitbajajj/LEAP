@@ -59,4 +59,44 @@ describe('db topology & readPreference', () => {
     expect(sh.mode).toBe('sharded');
     expect(sh.shards).toHaveLength(2);
   });
+
+  test('withTransaction runs without a session when disconnected or standalone', async () => {
+    const fn = jest.fn(async (session) => ({ session }));
+    expect(await db.withTransaction(fn)).toEqual({ session: null });
+
+    const adminMock = { command: jest.fn().mockResolvedValueOnce({ ok: 1 }) };
+    jest.spyOn(db.mongoose, 'connection', 'get').mockReturnValue({
+      readyState: 1,
+      db: { admin: () => adminMock },
+    });
+    expect(await db.withTransaction(fn)).toEqual({ session: null });
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  test('withTransaction uses a mongoose session on replicaSet and always ends it', async () => {
+    const adminMock = {
+      command: jest.fn()
+        .mockResolvedValueOnce({ setName: 'rs0', primary: 'mongo-1:27017' })
+        .mockResolvedValueOnce({ set: 'rs0', members: [] }),
+    };
+    jest.spyOn(db.mongoose, 'connection', 'get').mockReturnValue({
+      readyState: 1,
+      db: { admin: () => adminMock },
+    });
+
+    const sessionMock = {
+      withTransaction: jest.fn(async (cb) => cb()),
+      endSession: jest.fn().mockResolvedValue(undefined),
+    };
+    jest.spyOn(db.mongoose, 'startSession').mockResolvedValue(sessionMock);
+
+    const out = await db.withTransaction(async (session) => {
+      expect(session).toBe(sessionMock);
+      return 'ok';
+    });
+
+    expect(out).toBe('ok');
+    expect(sessionMock.withTransaction).toHaveBeenCalledTimes(1);
+    expect(sessionMock.endSession).toHaveBeenCalledTimes(1);
+  });
 });

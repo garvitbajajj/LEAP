@@ -116,9 +116,16 @@ router.patch('/admin/users/:id/role', ...adminOnly, ah(async (req, res) => {
   }
   const before = await User.findById(req.params.id);
   if (!before) throw new AppError(404, 'NOT_FOUND', 'User not found');
-  const user = await User.findByIdAndUpdate(req.params.id, { role }, { new: true });
-  if (role === 'learner') await LearnerProfile.updateOne({ userId: user._id }, {}, { upsert: true });
-  await audit(req.user.id, 'user.role', 'User', user._id, { role: before.role }, { role });
+  const user = await db.withTransaction(async (session) => {
+    const opts = session ? { session } : {};
+    const updated = await User.findByIdAndUpdate(req.params.id, { role }, { new: true, ...opts });
+    if (role === 'learner') await LearnerProfile.updateOne({ userId: updated._id }, {}, { upsert: true, ...opts });
+    await AuditLog.create([{
+      actorId: req.user.id, action: 'user.role', entity: 'User', entityId: updated._id,
+      before: { role: before.role }, after: { role },
+    }], opts);
+    return updated;
+  });
   res.json(user);
 }));
 
