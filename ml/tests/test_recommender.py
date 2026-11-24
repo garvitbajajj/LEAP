@@ -69,6 +69,19 @@ def test_completed_prerequisite_leads_the_explanation(model):
     assert out["items"][0]["reason"].startswith("Builds on Python Intro, which you completed")
 
 
+def test_completed_prerequisite_leads_even_outside_the_top_factors(model):
+    # Strong CF history pushes the prerequisite factor down the ranking, but it is
+    # still the clearest reason, so the explanation should lead with it.
+    hist = [("py1", 3), ("sql1", 1), ("web", 1)]
+    out = rank(model, request(["py2"], history=hist, completed=["py1", "sql1", "web"]))
+    assert out["items"][0]["reason"].startswith("Builds on Python Intro")
+
+
+def test_off_goal_items_are_labelled_honestly(model):
+    out = rank(model, request(["web"]))
+    assert "outside your current goal" in out["items"][0]["reason"]
+
+
 def test_brand_new_item_is_still_recommendable(model):
     new = {"_id": "new1", "title": "Advanced SQL Window Functions", "description": "sql analytics",
            "skills": ["sql"], "prerequisites": [], "difficulty": 2, "popularity": 0.0}

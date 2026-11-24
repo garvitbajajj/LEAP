@@ -156,9 +156,10 @@ def _explain(model: Model, cand: dict, top: list[dict], history, completed: set,
     goal = goal_label(profile.goals[0]) if profile.goals else None
     gap_skill = next((s for s in cand["skills"] if s in set(profile.goalSkills)), None)
     # A completed prerequisite is the most concrete, verifiable reason, so it leads
-    # whenever it is among the top factors; otherwise the strongest factor leads.
+    # whenever one exists - even if it is not among the three largest factors.
     names = [f["factor"] for f in top]
-    lead = "completed_prerequisite" if "completed_prerequisite" in names else (names[0] if names else "popularity")
+    has_prereq = any(p in completed for p in cand["prerequisites"])
+    lead = "completed_prerequisite" if has_prereq else (names[0] if names else "popularity")
 
     def most_similar(matrix_row_fn):
         scored = [(matrix_row_fn(i), i) for i, _ in history if i in model.index]
@@ -183,9 +184,10 @@ def _explain(model: Model, cand: dict, top: list[dict], history, completed: set,
     if lead == "skill_gap_fit" and gap_skill and goal:
         return f"Develops {skill_label(gap_skill)} for your {goal} goal"
     if clause is None:
-        clause = (f"Develops {skill_label(gap_skill)} for your {goal} goal" if gap_skill and goal
-                  else "Popular with learners on the same path")
-        return clause
+        if gap_skill and goal:
+            return f"Develops {skill_label(gap_skill)} for your {goal} goal"
+        # Off-goal items reach the list only on popularity; say so rather than imply relevance.
+        return "Popular across LEAP - outside your current goal, included for variety"
     if gap_skill and goal and any(f["factor"] == "skill_gap_fit" for f in top):
         return f"{clause}, and develops {skill_label(gap_skill)} for your {goal} goal"
     return clause
