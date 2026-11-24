@@ -3,4 +3,5 @@ module.exports = function mountRoutes(app) {
   app.get('/', (req, res) => res.json({ name: 'LEAP API', docs: '/api/v1/docs' }));
 
   app.use('/api/v1', require('./auth/routes'));
+  app.use('/api/v1', require('./admin/routes'));
 };
