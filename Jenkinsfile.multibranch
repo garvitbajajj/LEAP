@@ -226,11 +226,115 @@ pipeline {
       }
     }
 
-  }
+    // ─── 9. Push to registry (main only) ─────────────────────────────────
+    stage('Push') {
+      when { branch 'main' }
+      steps {
+        withCredentials([
+          usernamePassword(
+            credentialsId: 'dockerhub',
+            usernameVariable: 'DH_USER',
+            passwordVariable: 'DH_PASS'
+          )
+        ]) {
+          sh '''
+            echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
+            for svc in server ml client; do
+              docker push $REGISTRY/leap-$svc:$IMAGE_TAG
+              docker tag  $REGISTRY/leap-$svc:$IMAGE_TAG $REGISTRY/leap-$svc:latest
+              docker push $REGISTRY/leap-$svc:latest
+            done
+          '''
+        }
+      }
+    }
 
+    // ─── 10. Manual approval gate (main only) ────────────────────────────
+    // A team lead must click "Proceed" in the Jenkins UI before the deploy runs.
+    // The build parks here and waits; it auto-aborts after 24 hours if nobody acts.
+    stage('Approval Gate') {
+      when { branch 'main' }
+      steps {
+        script {
+          def deployer = input(
+            id: 'deploy-approval',
+            message: "Deploy LEAP build #${env.BUILD_NUMBER} (${env.GIT_COMMIT_SHORT}) to production?",
+            submitter: 'admin,devlead',
+            submitterParameter: 'APPROVED_BY',
+            ok: 'Proceed with Deploy',
+            parameters: [
+              choice(
+                name: 'DEPLOY_ENV',
+                choices: ['production', 'staging'],
+                description: 'Target environment'
+              ),
+              booleanParam(
+                name: 'RUN_SEED',
+                defaultValue: false,
+                description: 'Run the seed job after deploy? (WARNING: overwrites demo data)'
+              )
+            ]
+          )
+          env.DEPLOY_ENV  = deployer['DEPLOY_ENV']
+          env.APPROVED_BY = deployer['APPROVED_BY']
+          env.RUN_SEED    = deployer['RUN_SEED']
+          echo "Deploy approved by ${env.APPROVED_BY} → target: ${env.DEPLOY_ENV}"
+        }
+      }
+    }
+
+    // ─── 11. Deploy (main only, after manual approval) ────────────────────
+    stage('Deploy') {
+      when { branch 'main' }
+      steps {
+        script {
+          def composeCmd = "IMAGE_TAG=${env.IMAGE_TAG} docker compose up -d --build"
+          if (env.DEPLOY_ENV == 'staging') {
+            sh "COMPOSE_FILE=docker-compose.yml:docker-compose.staging.yml ${composeCmd}"
+          } else {
+            sh composeCmd
+          }
+          if (env.RUN_SEED == 'true') {
+            sh "docker compose --profile seed run --rm seed"
+          }
+        }
+      }
+    }
+
+  } // end stages
+
+  // ─── Post-build actions ───────────────────────────────────────────────
   post {
     always {
-      echo "Pipeline finished — branch: ${env.BRANCH_NAME}"
+      // Archive ML coverage XML for SonarQube / Codecov
+      archiveArtifacts allowEmptyArchive: true,
+        artifacts: 'ml/pytest-results.xml,ml/coverage.xml,server/coverage/**,client/vitest-results.xml'
+
+      // Publish a build summary to the GitHub commit status
+      script {
+        def result  = currentBuild.currentResult ?: 'UNKNOWN'
+        def emoji   = result == 'SUCCESS' ? '✅' : result == 'UNSTABLE' ? '⚠️' : '❌'
+        def message = "${emoji} LEAP ${env.BRANCH_NAME}#${env.BUILD_NUMBER} — ${result}"
+        echo message
+      }
+    }
+
+    success {
+      echo "✅ LEAP multibranch pipeline passed — branch: ${env.BRANCH_NAME}, commit: ${env.GIT_COMMIT_SHORT}"
+    }
+
+    unstable {
+      echo "⚠️ LEAP pipeline is UNSTABLE — some tests failed; check the JUnit report."
+    }
+
+    failure {
+      echo "❌ LEAP pipeline FAILED on branch: ${env.BRANCH_NAME} — check the stage logs above."
+    }
+
+    cleanup {
+      // Remove dangling Docker build layers to keep the agent disk clean
+      sh 'docker image prune -f || true'
+      cleanWs()
     }
   }
 
