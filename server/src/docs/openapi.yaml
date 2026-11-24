@@ -324,6 +324,65 @@ paths:
       responses:
         '200': { description: Password updated }
         '400': { $ref: '#/components/responses/Error' }
+  /auth/otp/send:
+    post:
+      tags: [Auth]
+      summary: Send a 6-digit email OTP
+      description: Issues a single-use SHA-256-hashed 6-digit OTP valid for 10 minutes (login_otp, verify_email, or password_reset). Never reveals whether the email exists.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email, example: learner@leap.dev }
+                purpose: { type: string, enum: [verify_email, login_otp, password_reset], default: login_otp }
+      responses:
+        '202': { description: OTP sent if account exists }
+        '400': { $ref: '#/components/responses/Error' }
+  /auth/otp/verify:
+    post:
+      tags: [Auth]
+      summary: Verify a 6-digit email OTP (and issue JWT/refresh cookie for login_otp)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email: { type: string, format: email }
+                code: { type: string, example: '123456' }
+                purpose: { type: string, enum: [verify_email, login_otp, password_reset], default: verify_email }
+      responses:
+        '200': { description: OTP verified }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /auth/reset-password-otp:
+    post:
+      tags: [Auth]
+      summary: Reset password using a 6-digit email OTP
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, password]
+              properties:
+                email: { type: string, format: email }
+                code: { type: string, example: '123456' }
+                password: { type: string, description: 8+ characters with a letter and a digit }
+      responses:
+        '200': { description: Password updated }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
   /auth/logout:
     post:
       tags: [Auth]

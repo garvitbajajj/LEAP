@@ -21,6 +21,7 @@ const UserSchema = new Schema({
   role: { type: String, enum: ['learner', 'instructor', 'admin'], default: 'learner' },
   authProvider: { type: String, enum: ['local', 'google'], default: 'local' },
   googleId: { type: String, unique: true, sparse: true },
+  emailVerified: { type: Boolean, default: false },
   failedLogins: { type: Number, default: 0, select: false },
   lockedUntil: { type: Date, select: false },
   resetTokenHash: { type: String, select: false, index: { sparse: true } },
@@ -28,7 +29,13 @@ const UserSchema = new Schema({
 }, opts);
 
 UserSchema.methods.toPublic = function toPublic() {
-  return { id: this._id, name: this.name, email: this.email, role: this.role };
+  return {
+    id: this._id,
+    name: this.name,
+    email: this.email,
+    role: this.role,
+    emailVerified: Boolean(this.emailVerified),
+  };
 };
 
 // ---------------------------------------------------------------- LearnerProfile (C5)
@@ -160,6 +167,18 @@ const RefreshTokenSchema = new Schema({
 // MongoDB deletes each token a day after it expires; until then it still detects reuse.
 RefreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 86_400 });
 
+// ---------------------------------------------------------------- OtpToken
+const OtpTokenSchema = new Schema({
+  email: { type: String, required: true, lowercase: true, trim: true, index: true },
+  purpose: { type: String, enum: ['verify_email', 'login_otp', 'password_reset'], required: true },
+  codeHash: { type: String, required: true },
+  attempts: { type: Number, default: 0 },
+  usedAt: { type: Date, default: null },
+  expiresAt: { type: Date, required: true },
+}, opts);
+OtpTokenSchema.index({ email: 1, purpose: 1, createdAt: -1 });
+OtpTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
 // ---------------------------------------------------------------- AuditLog
 const AuditLogSchema = new Schema({
   actorId: { type: ObjectId, ref: 'User' },
@@ -181,5 +200,6 @@ module.exports = {
   LearningPath: model('LearningPath', LearningPathSchema),
   ApiKey: model('ApiKey', ApiKeySchema),
   RefreshToken: model('RefreshToken', RefreshTokenSchema),
+  OtpToken: model('OtpToken', OtpTokenSchema),
   AuditLog: model('AuditLog', AuditLogSchema),
 };

@@ -10,6 +10,7 @@ const { createSessions, mongoStore } = require('./sessions');
 const google = require('./google');
 const { createResetToken, resetTokenQuery } = require('./passwordReset');
 const { sendMail } = require('./mailer');
+const { OTP_PURPOSES, createOtpService, mongoStore: otpMongoStore } = require('./otp');
 const { feedCache } = require('../recommendations/cache');
 const logger = require('../logger');
 
@@ -18,6 +19,7 @@ const router = express.Router();
 const REFRESH_COOKIE = 'leap_rt';
 const refreshTtlMs = config.refreshTtlDays * 86_400_000;
 const sessions = createSessions(mongoStore(), { ttlMs: refreshTtlMs });
+const otpService = createOtpService(otpMongoStore());
 
 // HttpOnly so page scripts can never read it; scoped to the auth routes so it is not
 // sent with every API call.
@@ -148,6 +150,88 @@ router.post('/auth/reset-password', authLimiter, ah(async (req, res) => {
     $unset: { resetTokenHash: 1, resetTokenExpires: 1, lockedUntil: 1 },
   });
   // A reset usually means the old password may be known to someone else, so end every session.
+  await sessions.revokeAllForUser(user._id);
+  res.json({ message: 'Password updated. Please log in with your new password.' });
+}));
+
+// ---------------------------------------------------------------- Email OTP
+const OTP_SUBJECTS = {
+  verify_email: 'Verify your LEAP email',
+  login_otp: 'Your LEAP sign-in code',
+  password_reset: 'Your LEAP password reset code',
+};
+
+router.post('/auth/otp/send', authLimiter, ah(async (req, res) => {
+  const email = String(req.body?.email || '').toLowerCase().trim();
+  const purpose = String(req.body?.purpose || 'login_otp').trim();
+  if (!EMAIL_RE.test(email)) throw new AppError(400, 'VALIDATION_FAILED', 'A valid email is required');
+  if (!OTP_PURPOSES.includes(purpose)) {
+    throw new AppError(400, 'INVALID_OTP_PURPOSE', `purpose must be one of ${OTP_PURPOSES.join(', ')}`);
+  }
+
+  const user = await User.findOne({ email });
+  let devCode;
+  if (user) {
+    const { code, ttlMinutes } = await otpService.issue({ email, purpose });
+    sendMail({
+      to: user.email,
+      subject: OTP_SUBJECTS[purpose],
+      text: `Hi ${user.name},\n\nYour LEAP one-time verification code is: ${code}\n\n`
+        + `It expires in ${ttlMinutes} minutes. If you did not request this, you can safely ignore this email.`,
+    }).catch((err) => logger.error({ err: err.message }, 'OTP email failed'));
+    if (!config.smtp.host && config.nodeEnv !== 'production') {
+      devCode = code;
+    }
+  }
+
+  // Identical response shape whether or not the account exists (prevents email enumeration).
+  res.status(202).json({
+    sent: true,
+    purpose,
+    ttlMinutes: otpService.ttlMinutes,
+    ...(devCode ? { devCode } : {}),
+  });
+}));
+
+router.post('/auth/otp/verify', authLimiter, ah(async (req, res) => {
+  const email = String(req.body?.email || '').toLowerCase().trim();
+  const purpose = String(req.body?.purpose || 'verify_email').trim();
+  const code = String(req.body?.code || '').trim();
+  if (!EMAIL_RE.test(email)) throw new AppError(400, 'VALIDATION_FAILED', 'A valid email is required');
+  if (!OTP_PURPOSES.includes(purpose)) {
+    throw new AppError(400, 'INVALID_OTP_PURPOSE', `purpose must be one of ${OTP_PURPOSES.join(', ')}`);
+  }
+
+  await otpService.verify({ email, purpose, code });
+  const user = await User.findOne({ email });
+  if (!user) throw new AppError(404, 'NOT_FOUND', 'User not found');
+
+  if (purpose === 'verify_email' && !user.emailVerified) {
+    user.emailVerified = true;
+    await user.save();
+  }
+  if (purpose === 'login_otp') {
+    return res.json({ verified: true, ...(await startSession(res, user)) });
+  }
+  return res.json({ verified: true, user: user.toPublic() });
+}));
+
+router.post('/auth/reset-password-otp', authLimiter, ah(async (req, res) => {
+  const email = String(req.body?.email || '').toLowerCase().trim();
+  const code = String(req.body?.code || '').trim();
+  const password = req.body?.password;
+  if (!EMAIL_RE.test(email)) throw new AppError(400, 'VALIDATION_FAILED', 'A valid email is required');
+  validatePassword(password);
+
+  await otpService.verify({ email, purpose: 'password_reset', code });
+  const user = await User.findOne({ email });
+  if (!user) throw new AppError(404, 'NOT_FOUND', 'User not found');
+
+  await User.updateOne({ _id: user._id }, {
+    passwordHash: await bcrypt.hash(password, 10),
+    failedLogins: 0,
+    $unset: { resetTokenHash: 1, resetTokenExpires: 1, lockedUntil: 1 },
+  });
   await sessions.revokeAllForUser(user._id);
   res.json({ message: 'Password updated. Please log in with your new password.' });
 }));

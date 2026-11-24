@@ -45,11 +45,12 @@ export function AuthProvider({ children }) {
   }, [refresh]);
 
   const login = useCallback((email, password) => api('/auth/login', { method: 'POST', body: { email, password } }).then(start), [start]);
+  const loginWithOtp = useCallback((email, code) => api('/auth/otp/verify', { method: 'POST', body: { email, code, purpose: 'login_otp' } }).then(start), [start]);
   const register = useCallback((name, email, password) => api('/auth/register', { method: 'POST', body: { name, email, password } }).then(start), [start]);
 
   const value = useMemo(() => ({
-    user, profile, loading, login, register, logout, refresh, setProfile,
-  }), [user, profile, loading, login, register, logout, refresh]);
+    user, profile, loading, login, loginWithOtp, register, logout, refresh, setProfile,
+  }), [user, profile, loading, login, loginWithOtp, register, logout, refresh]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
