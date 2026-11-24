@@ -29,6 +29,22 @@ Tick items as you finish them. Code for each item lives in your own vertical. Se
 
 ---
 
+## Jira stories
+
+Every task below is a story on the [LEAP board](https://leapcap.atlassian.net/jira/software/projects/KAN/boards/1),
+under its owner's epic. Put the key in your branch name and commit messages.
+
+| Member | Epic | Stories |
+|---|---|---|
+| Garvit | [KAN-4](https://leapcap.atlassian.net/browse/KAN-4) | KAN-8 Google OAuth · KAN-9 refresh tokens · KAN-10 password reset · KAN-11 Docker build · KAN-12 cloud + Ansible · KAN-13 branch protection · KAN-14 Jira setup · KAN-15 report · KAN-16 lab file |
+| Dhruvika | [KAN-5](https://leapcap.atlassian.net/browse/KAN-5) | KAN-17 Selenium + Maven · KAN-18 HTTPS · KAN-19 Postman · KAN-20 bulk CSV · KAN-21 report · KAN-22 lab file |
+| Abhishek | [KAN-6](https://leapcap.atlassian.net/browse/KAN-6) | KAN-23 run Jenkins · KAN-24 GitHub webhook · KAN-25 multibranch · KAN-26 ALS · KAN-27 Redis · KAN-28 report · KAN-29 lab file |
+| Taher | [KAN-7](https://leapcap.atlassian.net/browse/KAN-7) | KAN-30 Swarm · KAN-31 Kubernetes · KAN-32 Prometheus/Grafana · KAN-33 webhooks · KAN-34 evaluation · KAN-35 report · KAN-36 lab file |
+
+Each story's description lists its **Done when** criteria and the files it touches.
+
+---
+
 ## Rules for everyone (Git 3 + JIRA 3)
 
 These are cheap marks, and they're lost if only one person shows up in the history.
