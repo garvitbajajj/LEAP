@@ -199,6 +199,33 @@ pipeline {
       }
     }
 
+    // ─── 7. SonarQube Quality Gate (develop only — blocks the pipeline) ───
+    stage('Quality Gate') {
+      when { branch 'develop' }
+      steps {
+        timeout(time: 5, unit: 'MINUTES') {
+          waitForQualityGate abortPipeline: true
+        }
+      }
+    }
+
+    // ─── 8. Docker images (develop and main only) ─────────────────────────
+    stage('Docker Images') {
+      when {
+        anyOf {
+          branch 'main'
+          branch 'develop'
+        }
+      }
+      steps {
+        sh '''
+          docker build -t $REGISTRY/leap-server:$IMAGE_TAG server
+          docker build -t $REGISTRY/leap-ml:$IMAGE_TAG ml
+          docker build -t $REGISTRY/leap-client:$IMAGE_TAG client
+        '''
+      }
+    }
+
   }
 
   post {
