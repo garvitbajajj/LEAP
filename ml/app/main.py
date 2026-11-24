@@ -8,6 +8,7 @@ import hmac
 import logging
 import time
 from collections import Counter
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -20,7 +21,19 @@ from .schemas import EmbedRequest, RecommendRequest, RecommendResponse
 
 logging.basicConfig(level=logging.INFO, format='{"level":"%(levelname)s","time":"%(asctime)s","msg":"%(message)s"}')
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Warm start: fit from the LEAP API if it is up; otherwise the first request will."""
+    try:
+        MODEL.fit_from_api()
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("leap.ml").warning("warm start skipped: %s", exc)
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="LEAP Recommendation Service",
     version=config.VERSION,
     description="Hybrid recommender (content + collaborative + skill gap + popularity) with "
@@ -109,11 +122,3 @@ def embed(req: EmbedRequest):
         top = sorted(zip(v.indices, v.data), key=lambda x: -x[1])[:8]
         out.append({"dimensions": v.shape[1], "topTerms": [{"term": terms[i], "weight": round(float(w), 4)} for i, w in top]})
     return {"modelVersion": MODEL.version, "embeddings": out}
-
-
-@app.on_event("startup")
-def warm_start():
-    try:
-        MODEL.fit_from_api()
-    except Exception as exc:  # noqa: BLE001 - the first request will retry
-        logging.getLogger("leap.ml").warning("warm start skipped: %s", exc)

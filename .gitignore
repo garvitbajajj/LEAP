@@ -26,3 +26,6 @@ Thumbs.db
 # logs
 *.log
 npm-debug.log*
+
+# ML runtime artifacts
+ml/registry/
