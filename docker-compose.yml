@@ -1,0 +1,69 @@
+# LEAP - full stack
+#   docker compose up -d --build                  start everything
+#   docker compose --profile seed run --rm seed   load the demo data (first run)
+#   open http://localhost:8080                    app
+#   open http://localhost:8080/api/v1/docs        Swagger
+#   open http://localhost:8000/docs               ML service docs
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      MONGO_URI: mongodb://mongo:27017/leap
+      ML_URL: http://ml:8000
+      ML_API_KEY: ${ML_API_KEY:-leap-dev-ml-key}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      INTERNAL_BEARER_TOKEN: ${INTERNAL_BEARER_TOKEN:-leap-internal-dev-token}
+      CORS_ORIGINS: http://localhost:8080
+    ports:
+      - "4000:4000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  ml:
+    build: ./ml
+    restart: unless-stopped
+    environment:
+      ML_API_KEY: ${ML_API_KEY:-leap-dev-ml-key}
+      LEAP_API_URL: http://server:4000/api/v1
+      LEAP_API_KEY: ${ML_API_KEY:-leap-dev-ml-key}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ml-registry:/app/registry
+
+  client:
+    build: ./client
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
+
+  # One-shot: loads the demo catalogue and accounts. Not started by `up`.
+  seed:
+    build: ./server
+    profiles: ["seed"]
+    command: ["node", "src/seed/seed.js"]
+    environment:
+      MONGO_URI: mongodb://mongo:27017/leap
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo-data:
+  ml-registry:
