@@ -69,14 +69,17 @@ def rank(model: Model, req) -> dict:
     norm = np.linalg.norm(learner) if learner.ndim else 0
     content = np.array([float(v.toarray()[0] @ learner / norm) if norm else 0.0 for v in cand_vecs])
 
-    # ---- collaborative: engagement-weighted item-item similarity to the learner's history
-    hist_idx = [(model.index[i], w) for i, w in history if i in model.index]
-    total_w = sum(w for _, w in hist_idx) or 1.0
-    cf = np.array([
-        sum(w * model.cf_sim[h, model.index[c["_id"]]] for h, w in hist_idx) / total_w
-        if c["_id"] in model.index and hist_idx else 0.0
-        for c in cands
-    ])
+    # ---- collaborative: engagement-weighted ALS latent factor projection over learner history
+    if model.item_factors is not None and history:
+        cf = model.score_cf_history(history, [c["_id"] for c in cands])
+    else:
+        hist_idx = [(model.index[i], w) for i, w in history if i in model.index]
+        total_w = sum(w for _, w in hist_idx) or 1.0
+        cf = np.array([
+            sum(w * model.cf_sim[h, model.index[c["_id"]]] for h, w in hist_idx) / total_w
+            if c["_id"] in model.index and hist_idx and model.cf_sim is not None else 0.0
+            for c in cands
+        ])
 
     # ---- skill gap: goal skills the learner has not mastered, at a sensible difficulty
     target = TARGET_DIFFICULTY.get(profile.difficultyLevel, 2)
@@ -172,7 +175,12 @@ def _explain(model: Model, cand: dict, top: list[dict], history, completed: set,
             clause = f"Builds on {_title(model, pre)}, which you completed"
     elif lead == "cf_similarity" and cand["_id"] in model.index:
         k = model.index[cand["_id"]]
-        name = most_similar(lambda i: model.cf_sim[model.index[i], k])
+        if model.item_factors is not None:
+            name = most_similar(lambda i: float(model.item_factors[model.index[i]] @ model.item_factors[k]))
+        elif model.cf_sim is not None:
+            name = most_similar(lambda i: model.cf_sim[model.index[i], k])
+        else:
+            name = None
         if name:
             clause = f"Learners who took {name} often take this next"
     elif lead == "content_similarity":

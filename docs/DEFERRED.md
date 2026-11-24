@@ -24,8 +24,8 @@ independent of the others, so all four members can work in parallel.
 
 | # | Item | Where it plugs in |
 |---|---|---|
-| 1 | **ALS matrix-factorisation collaborative filtering.** Today CF is item-item cosine similarity; ALS adds latent factors and scales past the dense similarity matrix. | `ml/app/model.py` |
-| 2 | **Jenkins multibranch pipeline.** The declarative `Jenkinsfile` is built; add branch-conditional behaviour and a manual production gate. | `Jenkinsfile.multibranch` (new) |
+| 1 | **ALS matrix-factorisation collaborative filtering.** [COMPLETED] Implemented implicit ALS matrix factorisation (Hu-Koren-Volinsky) in `ml/app/als.py` and `ml/app/model.py`, replacing dense item-item cosine similarity with 16 latent factors and O(N*k) projection scaling. | `ml/app/model.py`, `ml/app/als.py` |
+| 2 | **Jenkins multibranch pipeline.** [COMPLETED] Added `Jenkinsfile.multibranch` with 11 declarative stages, branch-conditional SonarQube, Docker build/push, manual approval gate on `main`, and GitHub webhook trigger. | `Jenkinsfile.multibranch` (new), `docs/JENKINS_WEBHOOK_SETUP.md` (new) |
 | 3 | **Redis response caching** for the feed, invalidated when the learner's profile changes. | `server/src/recommendations/routes.js` |
 
 ## V4 - Taher Mohammed Husain Aurangabadi · Learning Path, Mastery & Analytics

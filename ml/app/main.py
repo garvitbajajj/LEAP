@@ -36,7 +36,7 @@ app = FastAPI(
     lifespan=lifespan,
     title="LEAP Recommendation Service",
     version=config.VERSION,
-    description="Hybrid recommender (content + collaborative + skill gap + popularity) with "
+    description="Hybrid recommender (TF-IDF content + ALS matrix-factorisation CF + skill gap + popularity) with "
                 "MMR diversity re-ranking and per-recommendation explanations. Contract C3.",
 )
 
@@ -82,7 +82,10 @@ def metrics():
     lines += ["# HELP ml_request_seconds_sum Cumulative request latency", "# TYPE ml_request_seconds_sum counter"]
     lines += [f'ml_request_seconds_sum{{method="{m}",route="{r}"}} {v:.6f}' for (m, r), v in LATENCY_SUM.items()]
     lines += ["# HELP ml_model_fitted Whether a model is loaded", "# TYPE ml_model_fitted gauge",
-              f"ml_model_fitted {int(MODEL.fitted)}"]
+              f"ml_model_fitted {int(MODEL.fitted)}",
+              "# HELP ml_als_latent_factors Number of latent dimensions in ALS factorisation",
+              "# TYPE ml_als_latent_factors gauge",
+              f"ml_als_latent_factors {config.ALS_FACTORS}"]
     return "\n".join(lines) + "\n"
 
 

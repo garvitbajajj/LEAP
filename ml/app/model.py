@@ -21,6 +21,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import normalize
 
 from . import config
+from .als import ALSResult, ImplicitALS, score_learner_history
 
 log = logging.getLogger("leap.ml")
 
@@ -42,6 +43,10 @@ class Model:
         self.vectorizer: TfidfVectorizer | None = None
         self.content = None          # sparse (n_items x vocab), rows L2-normalised
         self.cf_sim: np.ndarray | None = None  # dense (n_items x n_items), diagonal zeroed
+        self.item_factors: np.ndarray | None = None  # (n_items x n_factors) L2-normalised
+        self.user_factors: np.ndarray | None = None  # (n_users x n_factors)
+        self.als_result: ALSResult | None = None
+        self.cf_method = "als"
         self.interaction_rows = 0
         self._lock = threading.Lock()
 
@@ -59,10 +64,15 @@ class Model:
         vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True, stop_words="english")
         content = vectorizer.fit_transform([item_text(i) for i in catalogue])
 
-        # Item-item cosine similarity over the user x item engagement matrix.
-        # ponytail: dense n^2 similarity is fine for a few thousand items; switch to
-        # sparse top-k neighbours (or ALS factors) past ~20k.
-        cf_sim = np.zeros((len(ids), len(ids)))
+        # Implicit Alternating Least Squares (ALS) matrix factorisation.
+        # Decomposes user x item implicit interactions into compact latent factor vectors,
+        # scaling past dense n^2 pairwise similarity matrices to O(n_items * k).
+        k_factors = config.ALS_FACTORS
+        item_factors = np.zeros((len(ids), k_factors), dtype=np.float64)
+        user_factors = np.zeros((0, k_factors), dtype=np.float64)
+        als_result = None
+        cf_sim = np.zeros((len(ids), len(ids)), dtype=np.float64)
+
         rows = [r for r in interactions if str(r["itemId"]) in index and r.get("weight", 0) > 0]
         if rows:
             users = {u: k for k, u in enumerate(sorted({str(r["userId"]) for r in rows}))}
@@ -71,14 +81,26 @@ class Model:
                  ([users[str(r["userId"])] for r in rows], [index[str(r["itemId"])] for r in rows])),
                 shape=(len(users), len(ids)),
             )
-            cols = normalize(m, axis=0)
-            cf_sim = (cols.T @ cols).toarray()
+            als = ImplicitALS(
+                n_factors=config.ALS_FACTORS,
+                regularization=config.ALS_REGULARIZATION,
+                iterations=config.ALS_ITERATIONS,
+                alpha=config.ALS_ALPHA,
+                random_state=42,
+            )
+            als_result = als.fit(m)
+            item_factors = als_result.normalized_item_factors
+            user_factors = als_result.user_factors
+            # Compute item-item cosine similarity in latent space: (N x k) @ (k x N)
+            cf_sim = (item_factors @ item_factors.T).astype(np.float64)
             np.fill_diagonal(cf_sim, 0.0)
 
         with self._lock:
             self.items = {str(i["_id"]): i for i in catalogue}
             self.ids, self.index = ids, index
-            self.vectorizer, self.content, self.cf_sim = vectorizer, content, cf_sim
+            self.vectorizer, self.content = vectorizer, content
+            self.cf_sim, self.item_factors, self.user_factors = cf_sim, item_factors, user_factors
+            self.als_result = als_result
             self.interaction_rows = len(rows)
             self.source = source
             self.trained_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -111,14 +133,33 @@ class Model:
     def text_vector(self, text: str):
         return normalize(self.vectorizer.transform([text]))
 
+    def score_cf_history(self, history: list[tuple[str, float]], candidate_ids: list[str]) -> np.ndarray:
+        """
+        Fast O(len(cands) * k) latent factor scoring directly from learner history,
+        bypassing dense pairwise matrix allocations.
+        """
+        if self.item_factors is None or not history or not candidate_ids:
+            return np.zeros(len(candidate_ids), dtype=np.float64)
+        hist_pairs = [(self.index[i], float(w)) for i, w in history if i in self.index]
+        if not hist_pairs:
+            return np.zeros(len(candidate_ids), dtype=np.float64)
+        h_idx, h_weights = zip(*hist_pairs)
+        c_idx = [self.index[c] for c in candidate_ids if c in self.index]
+        if not c_idx:
+            return np.zeros(len(candidate_ids), dtype=np.float64)
+        raw_scores = score_learner_history(self.item_factors, h_idx, h_weights, c_idx)
+        score_map = dict(zip([c for c in candidate_ids if c in self.index], raw_scores))
+        return np.array([score_map.get(c, 0.0) for c in candidate_ids], dtype=np.float64)
+
     # ------------------------------------------------------------ registry
     def _write_registry(self) -> None:
         try:
             os.makedirs(config.REGISTRY_DIR, exist_ok=True)
             meta = {
                 "version": self.version, "trainedAt": self.trained_at, "source": self.source,
-                "algorithm": "hybrid: tfidf content + item-item CF + skill gap + popularity, MMR re-rank",
+                "algorithm": "hybrid: tfidf content + ALS matrix-factorisation CF + skill gap + popularity, MMR re-rank",
                 "items": len(self.ids), "interactionRows": self.interaction_rows,
+                "cf": {"method": "als", "factors": config.ALS_FACTORS, "iterations": config.ALS_ITERATIONS},
             }
             with open(os.path.join(config.REGISTRY_DIR, "active.json"), "w", encoding="utf-8") as f:
                 json.dump(meta, f, indent=2)
@@ -129,6 +170,7 @@ class Model:
         return {
             "version": self.version, "trainedAt": self.trained_at, "source": self.source,
             "fitted": self.fitted, "items": len(self.ids), "interactionRows": self.interaction_rows,
+            "cfMethod": self.cf_method, "latentFactors": config.ALS_FACTORS,
         }
 
 

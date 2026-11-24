@@ -21,8 +21,9 @@ ML and DevOps within their vertical. See [`docs/LEAP_Work_Division.docx`](docs/L
 
 ## What it does
 
-- **Hybrid recommendations** — five signals blended per learner: item-item collaborative
-  filtering, TF-IDF content similarity, skill-gap fit, completed prerequisites and popularity.
+- **Hybrid recommendations** — five signals blended per learner: ALS latent factor
+  collaborative filtering (Hu-Koren-Volinsky implicit matrix factorisation), TF-IDF content similarity,
+  skill-gap fit, completed prerequisites and popularity.
 - **Cold start** — new learners are ranked from their onboarding goal until they have history.
 - **Diversity** — Maximal Marginal Relevance re-ranking with a per-topic cap.
 - **An explanation on every recommendation** — e.g. *"Builds on Control Flow, which you
