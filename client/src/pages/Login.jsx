@@ -33,13 +33,18 @@ export default function Login() {
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
+  const [notice, setNotice] = useState(null);
+  const switchMode = (m) => { setMode(m); setError(null); setNotice(null); };
+
   async function submit(e) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     setBusy(true);
     try {
       if (mode === 'login') await login(form.email, form.password);
-      else await register(form.name, form.email, form.password);
+      else if (mode === 'register') await register(form.name, form.email, form.password);
+      else setNotice((await api('/auth/forgot-password', { method: 'POST', body: { email: form.email } })).message);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -73,10 +78,14 @@ export default function Login() {
         <Card>
           <div className="spread" style={{ marginBottom: 20 }}>
             <div className="mobile-only"><Logo /></div>
-            <h2 style={{ margin: 0 }}>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
+            <h2 style={{ margin: 0 }}>{{ login: 'Welcome back', register: 'Create your account', forgot: 'Reset your password' }[mode]}</h2>
           </div>
 
           {error && <Banner tone="error">{error}</Banner>}
+          {notice && <Banner tone="success">{notice}</Banner>}
+          {mode === 'forgot' && !notice && (
+            <p className="small muted">Enter your account email and we will send you a link to choose a new password.</p>
+          )}
 
           <form className="stack" onSubmit={submit}>
             {mode === 'register' && (
@@ -87,23 +96,34 @@ export default function Login() {
             <Field label="Email" id="email">
               <input id="email" type="email" className="input" value={form.email} onChange={set('email')} required autoComplete="email" />
             </Field>
-            <Field label="Password" id="password">
-              <input id="password" type="password" className="input" value={form.password} onChange={set('password')} required
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 8 : undefined} />
-            </Field>
+            {mode !== 'forgot' && (
+              <Field label="Password" id="password">
+                <input id="password" type="password" className="input" value={form.password} onChange={set('password')} required
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 8 : undefined} />
+              </Field>
+            )}
+            {mode === 'login' && (
+              <button type="button" className="why-toggle small" style={{ alignSelf: 'flex-end', marginTop: -6 }} onClick={() => switchMode('forgot')}>
+                Forgot password?
+              </button>
+            )}
             {mode === 'register' && <p className="small muted" style={{ margin: 0 }}>At least 8 characters, with a letter and a digit.</p>}
-            <Button type="submit" block disabled={busy}>{busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'}</Button>
+            <Button type="submit" block disabled={busy}>
+              {busy ? 'Please wait…' : { login: 'Log in', register: 'Create account', forgot: 'Send reset link' }[mode]}
+            </Button>
           </form>
 
-          <Button variant="ghost" block style={{ marginTop: 10 }} disabled={!googleEnabled}
-            title={googleEnabled ? undefined : 'Google sign-in is not configured on this server'}
-            onClick={() => { window.location.href = '/api/v1/auth/google'; }}>
-            Continue with Google
-          </Button>
+          {mode !== 'forgot' && (
+            <Button variant="ghost" block style={{ marginTop: 10 }} disabled={!googleEnabled}
+              title={googleEnabled ? undefined : 'Google sign-in is not configured on this server'}
+              onClick={() => { window.location.href = '/api/v1/auth/google'; }}>
+              Continue with Google
+            </Button>
+          )}
 
           <p className="small" style={{ textAlign: 'center', margin: '16px 0 0' }}>
-            {mode === 'login' ? 'New to LEAP? ' : 'Already have an account? '}
-            <button type="button" className="why-toggle" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(null); }}>
+            {mode === 'login' ? 'New to LEAP? ' : mode === 'register' ? 'Already have an account? ' : 'Remembered it? '}
+            <button type="button" className="why-toggle" onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}>
               {mode === 'login' ? 'Create an account' : 'Log in'}
             </button>
           </p>
