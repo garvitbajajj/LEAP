@@ -57,17 +57,17 @@ def rank(model: Model, req) -> dict:
     strategy = "hybrid" if len(history) >= COLD_START_MIN_HISTORY else "cold_start"
     weights = WEIGHTS[strategy]
 
-    cand_vecs = [model.vector(c) for c in cands]
+    cand_vecs = [model.vector_1d(c) for c in cands]
 
     # ---- content: learner vector = engagement-weighted history + declared goal and skills
     goal_text = " ".join(skill_label(s) for s in [*profile.goalSkills, *(k.skill for k in profile.knownSkills)])
-    learner = model.text_vector(goal_text).toarray()[0] if goal_text.strip() else 0
+    learner = model.text_vector_1d(goal_text) if goal_text.strip() else np.zeros(model.embedding_dim, dtype=float)
     for item_id, w in history:
         if item_id in model.index:
-            learner = learner + w * model.content[model.index[item_id]].toarray()[0]
+            learner = learner + w * model.item_vector_1d(model.index[item_id])
     learner = np.asarray(learner, dtype=float)
     norm = np.linalg.norm(learner) if learner.ndim else 0
-    content = np.array([float(v.toarray()[0] @ learner / norm) if norm else 0.0 for v in cand_vecs])
+    content = np.array([float(v @ learner / norm) if norm else 0.0 for v in cand_vecs])
 
     # ---- collaborative: engagement-weighted ALS latent factor projection over learner history
     if model.item_factors is not None and history:
@@ -125,9 +125,9 @@ def rank(model: Model, req) -> dict:
     return {"modelVersion": model.version, "strategy": strategy, "items": items}
 
 
-def _mmr(cands: list[dict], vecs: list, relevance: np.ndarray, limit: int) -> list[int]:
+def _mmr(cands: list[dict], vecs: list[np.ndarray], relevance: np.ndarray, limit: int) -> list[int]:
     """Maximal Marginal Relevance with a cap on how many picks share a primary skill."""
-    sims = np.array([[float((a @ b.T).toarray()[0, 0]) for b in vecs] for a in vecs])
+    sims = np.array([[float(a @ b) for b in vecs] for a in vecs])
     cap = max(1, math.ceil(limit * TOPIC_CAP))
     remaining = sorted(range(len(cands)), key=lambda k: (-relevance[k], cands[k]["_id"]))
     chosen: list[int] = []
@@ -184,8 +184,8 @@ def _explain(model: Model, cand: dict, top: list[dict], history, completed: set,
         if name:
             clause = f"Learners who took {name} often take this next"
     elif lead == "content_similarity":
-        v = model.vector(cand)
-        name = most_similar(lambda i: float((model.content[model.index[i]] @ v.T).toarray()[0, 0]))
+        v = model.vector_1d(cand)
+        name = most_similar(lambda i: float(model.item_vector_1d(model.index[i]) @ v))
         if name:
             clause = f"Similar to {name}, which you studied"
 

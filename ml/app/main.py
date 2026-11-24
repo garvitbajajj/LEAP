@@ -36,7 +36,7 @@ app = FastAPI(
     lifespan=lifespan,
     title="LEAP Recommendation Service",
     version=config.VERSION,
-    description="Hybrid recommender (TF-IDF content + ALS matrix-factorisation CF + skill gap + popularity) with "
+    description="Hybrid recommender (sentence-transformer embeddings with TF-IDF fallback + ALS matrix-factorisation CF + skill gap + popularity) with "
                 "MMR diversity re-ranking and per-recommendation explanations. Contract C3.",
 )
 
@@ -115,13 +115,27 @@ def models():
 
 @app.post("/ml/v1/embed", tags=["Model"], dependencies=[Depends(require_api_key)])
 def embed(req: EmbedRequest):
-    """Project text into the fitted TF-IDF space; returns the strongest terms per text."""
+    """Project text into the active content space (sentence-transformer dense vector or TF-IDF top terms)."""
     if not MODEL.fitted:
         raise HTTPException(status_code=409, detail={"code": "NOT_FITTED", "message": "Call /ml/v1/retrain first"})
-    terms = MODEL.vectorizer.get_feature_names_out()
     out = []
-    for text in req.texts:
-        v = MODEL.text_vector(text)
-        top = sorted(zip(v.indices, v.data), key=lambda x: -x[1])[:8]
-        out.append({"dimensions": v.shape[1], "topTerms": [{"term": terms[i], "weight": round(float(w), 4)} for i, w in top]})
+    if MODEL.content_encoder == "sentence-transformer":
+        for text in req.texts:
+            vec = MODEL.text_vector_1d(text)
+            out.append({
+                "encoder": MODEL.content_encoder,
+                "model": MODEL.embedding_model,
+                "dimensions": int(vec.shape[0]),
+                "embedding": [round(float(x), 5) for x in vec],
+            })
+    else:
+        terms = MODEL.vectorizer.get_feature_names_out()
+        for text in req.texts:
+            v = MODEL.text_vector(text)
+            top = sorted(zip(v.indices, v.data), key=lambda x: -x[1])[:8]
+            out.append({
+                "encoder": MODEL.content_encoder,
+                "dimensions": v.shape[1],
+                "topTerms": [{"term": terms[i], "weight": round(float(w), 4)} for i, w in top],
+            })
     return {"modelVersion": MODEL.version, "embeddings": out}

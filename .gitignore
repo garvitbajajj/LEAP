@@ -11,11 +11,16 @@ build/
 coverage/
 .pytest_cache/
 htmlcov/
+tests/e2e/target/
+postman/newman-report.xml
 
 # env and secrets
 .env
 *.pem
 *.key
+client/certs/*.crt
+client/certs/*.key
+client/certs/*.pem
 
 # editors / OS
 .vscode/

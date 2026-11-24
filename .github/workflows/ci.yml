@@ -40,3 +40,28 @@ jobs:
       - run: npm ci
       - run: npx vitest run
       - run: npm run build
+
+  e2e-java:
+    name: Java / Maven E2E Unit Tests
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: tests/e2e } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17', cache: maven }
+      - run: mvn -B test
+
+  postman-nginx-validate:
+    name: Validate Postman Collection & Nginx TLS Config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node -e "JSON.parse(require('fs').readFileSync('postman/LEAP.postman_collection.json','utf8')); JSON.parse(require('fs').readFileSync('postman/LEAP.local.postman_environment.json','utf8')); console.log('Postman JSON valid');"
+      - run: grep -q 'ssl_protocols.*TLSv1.2' client/nginx.conf && grep -q 'return 301 https' client/nginx.conf
+      - name: Run Newman against live stack (when LEAP_LIVE_URL is configured)
+        if: env.LEAP_LIVE_URL != ''
+        env:
+          LEAP_LIVE_URL: ${{ vars.LEAP_LIVE_URL }}
+        run: npx --yes newman run postman/LEAP.postman_collection.json -e postman/LEAP.local.postman_environment.json --env-var "baseUrl=$LEAP_LIVE_URL" --env-var "apiBase=$LEAP_LIVE_URL/api/v1" --insecure --reporters cli,junit --reporter-junit-export postman/newman-report.xml

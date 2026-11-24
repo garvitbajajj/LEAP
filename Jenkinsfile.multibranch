@@ -1,4 +1,4 @@
-﻿// LEAP — Multibranch Declarative Pipeline
+// LEAP — Multibranch Declarative Pipeline
 // Author : Abhishek Vijay Kakde · V3 Recommendations & Feed
 //
 // Branch behaviour
@@ -158,6 +158,44 @@ pipeline {
               junit allowEmptyResults: true, testResults: 'client/vitest-results.xml'
             }
           }
+        }
+
+        stage('e2e - maven unit') {
+          steps {
+            dir('tests/e2e') {
+              sh 'mvn -B test'
+            }
+          }
+          post {
+            always {
+              junit allowEmptyResults: true, testResults: 'tests/e2e/target/surefire-reports/*.xml'
+            }
+          }
+        }
+      }
+    }
+
+    // ─── 4b. Newman & Selenium E2E (when LEAP_E2E_URL is provided) ────────
+    stage('Postman & Selenium E2E') {
+      when { expression { env.LEAP_E2E_URL?.trim() } }
+      steps {
+        sh '''
+          npx --yes newman run postman/LEAP.postman_collection.json \
+            -e postman/LEAP.local.postman_environment.json \
+            --env-var "baseUrl=${LEAP_E2E_URL}" \
+            --env-var "apiBase=${LEAP_E2E_URL}/api/v1" \
+            --insecure \
+            --reporters cli,junit \
+            --reporter-junit-export postman/newman-report.xml
+        '''
+        dir('tests/e2e') {
+          sh 'mvn -B verify -Dleap.baseUrl=${LEAP_E2E_URL} -Dleap.headless=true'
+        }
+      }
+      post {
+        always {
+          junit allowEmptyResults: true, testResults: 'tests/e2e/target/failsafe-reports/*.xml,postman/newman-report.xml'
+          archiveArtifacts allowEmptyArchive: true, artifacts: 'tests/e2e/target/screenshots/**'
         }
       }
     }

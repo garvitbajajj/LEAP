@@ -1,0 +1,2 @@
+# Dense semantic content embeddings (all-MiniLM-L6-v2)
+sentence-transformers>=3.0

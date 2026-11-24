@@ -85,6 +85,117 @@ export function Analytics() {
 // ---------------------------------------------------------------- content management
 const BLANK = { title: '', description: '', type: 'video', skills: '', difficulty: 2, durationMins: 20, prerequisites: [] };
 
+const SAMPLE_CSV = [
+  'title,description,type,skills,difficulty,durationMins,status,prerequisites',
+  '"Intro to DuckDB","Columnar analytics in SQL",article,sql|data-wrangling,2,15,draft,',
+  '"DuckDB Window Queries","Analytical window functions with DuckDB",video,sql|data-wrangling,3,25,draft,"Intro to DuckDB"',
+].join('\n');
+
+function BulkCsvImport({ onImported }) {
+  const [csv, setCsv] = useState('');
+  const [preview, setPreview] = useState(null);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function runPreview() {
+    setError(null);
+    setSuccess(null);
+    setBusy(true);
+    try {
+      const res = await api('/catalogue/import', { method: 'POST', body: { csv, dryRun: true } });
+      setPreview(res);
+    } catch (err) {
+      setError(err.message);
+      setPreview(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function commitImport() {
+    setError(null);
+    setSuccess(null);
+    setBusy(true);
+    try {
+      const res = await api('/catalogue/import', { method: 'POST', body: { csv, dryRun: false } });
+      setSuccess(`Imported ${res.importedCount} content item${res.importedCount === 1 ? '' : 's'}.`);
+      setPreview(null);
+      setCsv('');
+      await onImported();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { setCsv(String(reader.result || '')); setPreview(null); setError(null); };
+    reader.readAsText(file);
+  }
+
+  return (
+    <Card style={{ marginTop: 20 }}>
+      <div className="spread" style={{ marginBottom: 12 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Bulk CSV import</h2>
+          <p className="small muted" style={{ margin: 0 }}>Upload or paste a CSV, run a dry-run preview to validate rows and check for prerequisite cycles, then import.</p>
+        </div>
+        <Button size="sm" variant="ghost" onClick={() => { setCsv(SAMPLE_CSV); setPreview(null); setError(null); }}>Load sample CSV</Button>
+      </div>
+
+      {error && <Banner tone="error">{error}</Banner>}
+      {success && <Banner tone="success">{success}</Banner>}
+
+      <div className="stack">
+        <div className="row">
+          <input type="file" accept=".csv,text/csv" aria-label="Upload CSV file" onChange={handleFile} />
+        </div>
+        <textarea className="input" rows={5} aria-label="CSV content" placeholder="title,description,type,skills,difficulty,durationMins,status,prerequisites"
+          value={csv} onChange={(e) => { setCsv(e.target.value); setPreview(null); }} />
+        <div className="row">
+          <Button variant="ghost" disabled={busy || !csv.trim()} onClick={runPreview}>{busy ? 'Checking…' : 'Dry-run preview'}</Button>
+          {preview && preview.errorCount === 0 && preview.validCount > 0 && (
+            <Button disabled={busy} onClick={commitImport}>{busy ? 'Importing…' : `Import ${preview.validCount} item${preview.validCount === 1 ? '' : 's'}`}</Button>
+          )}
+        </div>
+      </div>
+
+      {preview && (
+        <div style={{ marginTop: 14 }}>
+          <p className="small">
+            <b>Dry-run result:</b> {preview.validCount} valid · {preview.errorCount} error{preview.errorCount === 1 ? '' : 's'}
+            {preview.cycle ? ' · prerequisite cycle detected' : ''}
+          </p>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table">
+              <thead><tr><th>Row</th><th>Title</th><th>Status</th><th>Details</th></tr></thead>
+              <tbody>
+                {preview.rows.map((r) => (
+                  <tr key={r.rowNumber}>
+                    <td>{r.rowNumber}</td>
+                    <td>{r.title || '—'}</td>
+                    <td><Badge tone={r.status === 'valid' ? 'success' : 'error'}>{r.status}</Badge></td>
+                    <td className="small">
+                      {r.status === 'valid'
+                        ? `${r.preview.type} · diff ${r.preview.difficulty} · ${r.preview.skills.join(', ')}`
+                        : r.errors.join('; ')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function ManageContent() {
   const [items, setItems] = useState(null);
   const [form, setForm] = useState(BLANK);
@@ -192,6 +303,8 @@ export function ManageContent() {
           </form>
         </Card>
       </div>
+
+      <BulkCsvImport onImported={reloadAll} />
     </>
   );
 }

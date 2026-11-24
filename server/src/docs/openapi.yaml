@@ -483,6 +483,31 @@ paths:
       responses:
         '200': { description: Retired }
         '409': { $ref: '#/components/responses/Error' }
+  /catalogue/import:
+    post:
+      tags: [Catalogue]
+      summary: Bulk import catalogue items from CSV with optional dry-run preview (instructor or admin)
+      description: Parses CSV rows, validates fields, resolves prerequisites by title or ObjectId, checks the prerequisite DAG for cycles, and either previews (dryRun=true) or inserts all rows.
+      parameters:
+        - { name: dryRun, in: query, schema: { type: boolean, default: false }, description: Validate and preview without writing to MongoDB }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [csv]
+              properties:
+                csv: { type: string }
+                dryRun: { type: boolean, default: false }
+          text/csv:
+            schema: { type: string }
+      responses:
+        '200': { description: Dry-run validation preview }
+        '201': { description: Imported items created }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
   /catalogue/items/{id}/attempt:
     parameters: [{ $ref: '#/components/parameters/IdPath' }]
     post:

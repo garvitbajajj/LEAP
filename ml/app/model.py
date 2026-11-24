@@ -1,6 +1,6 @@
 """
-The fitted model: a TF-IDF content space over the catalogue and an item-item
-collaborative-filtering similarity matrix over the implicit-feedback matrix.
+The fitted model: semantic sentence-transformer content embeddings (with TF-IDF fallback)
+and an ALS latent-factor collaborative filter over the implicit-feedback matrix.
 
 Fitting pulls both datasets from the LEAP API over API-key auth. If the API is
 unreachable the model fits a content-only space from whatever candidates it is
@@ -16,12 +16,11 @@ import urllib.request
 from datetime import datetime, timezone
 
 import numpy as np
-from scipy.sparse import csr_matrix
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.preprocessing import normalize
+from scipy.sparse import csr_matrix, issparse
 
 from . import config
 from .als import ALSResult, ImplicitALS, score_learner_history
+from .embeddings import build_encoder, to_dense_1d
 
 log = logging.getLogger("leap.ml")
 
@@ -40,8 +39,12 @@ class Model:
         self.items: dict[str, dict] = {}
         self.ids: list[str] = []
         self.index: dict[str, int] = {}
-        self.vectorizer: TfidfVectorizer | None = None
-        self.content = None          # sparse (n_items x vocab), rows L2-normalised
+        self.encoder = None
+        self.content_encoder = "unfitted"
+        self.embedding_model = ""
+        self.embedding_dim = 0
+        self.vectorizer = None       # set only when TF-IDF encoder is active
+        self.content = None          # (n_items x dim), dense ndarray or sparse CSR, L2-normalised
         self.cf_sim: np.ndarray | None = None  # dense (n_items x n_items), diagonal zeroed
         self.item_factors: np.ndarray | None = None  # (n_items x n_factors) L2-normalised
         self.user_factors: np.ndarray | None = None  # (n_users x n_factors)
@@ -52,17 +55,17 @@ class Model:
 
     @property
     def fitted(self) -> bool:
-        return self.vectorizer is not None
+        return self.encoder is not None and self.content is not None
 
     # ------------------------------------------------------------ fitting
-    def fit(self, catalogue: list[dict], interactions: list[dict], source: str) -> None:
+    def fit(self, catalogue: list[dict], interactions: list[dict], source: str, encoder=None) -> None:
         if not catalogue:
             raise ValueError("cannot fit on an empty catalogue")
         ids = [str(i["_id"]) for i in catalogue]
         index = {item_id: k for k, item_id in enumerate(ids)}
 
-        vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True, stop_words="english")
-        content = vectorizer.fit_transform([item_text(i) for i in catalogue])
+        active_encoder = encoder or build_encoder()
+        content = active_encoder.fit_transform([item_text(i) for i in catalogue])
 
         # Implicit Alternating Least Squares (ALS) matrix factorisation.
         # Decomposes user x item implicit interactions into compact latent factor vectors,
@@ -98,7 +101,12 @@ class Model:
         with self._lock:
             self.items = {str(i["_id"]): i for i in catalogue}
             self.ids, self.index = ids, index
-            self.vectorizer, self.content = vectorizer, content
+            self.encoder = active_encoder
+            self.content_encoder = active_encoder.name
+            self.embedding_model = active_encoder.model_name
+            self.embedding_dim = int(content.shape[1])
+            self.vectorizer = getattr(active_encoder, "vectorizer", None)
+            self.content = content
             self.cf_sim, self.item_factors, self.user_factors = cf_sim, item_factors, user_factors
             self.als_result = als_result
             self.interaction_rows = len(rows)
@@ -106,7 +114,10 @@ class Model:
             self.trained_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
             self.version = f"hybrid-v1.{datetime.now(timezone.utc):%Y%m%d%H%M%S}"
         self._write_registry()
-        log.info("model fitted: %s items, %s interactions, source=%s", len(ids), len(rows), source)
+        log.info(
+            "model fitted: %s items, %s interactions, encoder=%s (%s), source=%s",
+            len(ids), len(rows), self.content_encoder, self.embedding_model, source,
+        )
 
     def fit_from_api(self) -> None:
         catalogue = _get(f"{config.LEAP_API_URL}/internal/catalogue")["items"]
@@ -124,14 +135,24 @@ class Model:
 
     # ------------------------------------------------------------ vectors
     def vector(self, item: dict):
-        """Content vector for an item; unseen items are projected into the fitted space."""
+        """Content vector row (1 x dim) for an item; unseen items are encoded on demand."""
         k = self.index.get(str(item.get("_id", item.get("id"))))
         if k is not None:
-            return self.content[k]
-        return normalize(self.vectorizer.transform([item_text(item)]))
+            row = self.content[k]
+            return row if issparse(row) else row.reshape(1, -1)
+        return self.encoder.transform([item_text(item)])
 
     def text_vector(self, text: str):
-        return normalize(self.vectorizer.transform([text]))
+        return self.encoder.transform([text])
+
+    def item_vector_1d(self, k: int) -> np.ndarray:
+        return to_dense_1d(self.content[k])
+
+    def vector_1d(self, item: dict) -> np.ndarray:
+        return to_dense_1d(self.vector(item))
+
+    def text_vector_1d(self, text: str) -> np.ndarray:
+        return to_dense_1d(self.text_vector(text))
 
     def score_cf_history(self, history: list[tuple[str, float]], candidate_ids: list[str]) -> np.ndarray:
         """
@@ -157,8 +178,11 @@ class Model:
             os.makedirs(config.REGISTRY_DIR, exist_ok=True)
             meta = {
                 "version": self.version, "trainedAt": self.trained_at, "source": self.source,
-                "algorithm": "hybrid: tfidf content + ALS matrix-factorisation CF + skill gap + popularity, MMR re-rank",
+                "algorithm": f"hybrid: {self.content_encoder} content + ALS matrix-factorisation CF + skill gap + popularity, MMR re-rank",
                 "items": len(self.ids), "interactionRows": self.interaction_rows,
+                "contentEncoder": self.content_encoder,
+                "embeddingModel": self.embedding_model,
+                "embeddingDim": self.embedding_dim,
                 "cf": {"method": "als", "factors": config.ALS_FACTORS, "iterations": config.ALS_ITERATIONS},
             }
             with open(os.path.join(config.REGISTRY_DIR, "active.json"), "w", encoding="utf-8") as f:
@@ -170,6 +194,8 @@ class Model:
         return {
             "version": self.version, "trainedAt": self.trained_at, "source": self.source,
             "fitted": self.fitted, "items": len(self.ids), "interactionRows": self.interaction_rows,
+            "contentEncoder": self.content_encoder, "embeddingModel": self.embedding_model,
+            "embeddingDim": self.embedding_dim,
             "cfMethod": self.cf_method, "latentFactors": config.ALS_FACTORS,
         }
 
