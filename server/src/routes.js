@@ -5,4 +5,5 @@ module.exports = function mountRoutes(app) {
   app.use('/api/v1', require('./auth/routes'));
   app.use('/api/v1', require('./admin/routes'));
   app.use('/api/v1', require('./catalogue/routes'));
+  app.use('/api/v1', require('./path/routes'));
 };
