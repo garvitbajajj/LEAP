@@ -62,9 +62,9 @@ These are cheap marks, and they're lost if only one person shows up in the histo
 ## Garvit Bajaj — V1 Identity, Access & Platform · Epic KAN-4
 
 **Code (finishes the Swagger auth item, 10 marks)**
-- [ ] Google OAuth 2.0 token exchange in `/auth/google/callback`: create a Google Cloud OAuth client, exchange the code, create or link the user, issue the JWT
-- [ ] Refresh-token rotation: 15-minute access token plus an HttpOnly refresh cookie, rotated on use, reuse detection
-- [ ] Password reset by email: single-use, hashed, time-limited token
+- [x] Google OAuth 2.0 token exchange in `/auth/google/callback`: create a Google Cloud OAuth client, exchange the code, create or link the user, issue the JWT
+- [x] Refresh-token rotation: 15-minute access token plus an HttpOnly refresh cookie, rotated on use, reuse detection
+- [x] Password reset by email: single-use, hashed, time-limited token
 - [ ] Test all five schemes again from the Swagger **Authorize** dialog and screenshot each one
 
 **DevOps (Docker 3)**
@@ -114,7 +114,7 @@ These are cheap marks, and they're lost if only one person shows up in the histo
 - [ ] **GitHub webhook → Jenkins** so every push triggers a build automatically
 - [x] **`Jenkinsfile.multibranch`**: tests on every branch and PR, deploy only from `main`, a manual approval gate before production
 - [x] ALS matrix-factorisation collaborative filtering, replacing item-item CF in `ml/app/model.py`
-- [ ] Redis caching of the feed, invalidated when the profile changes
+- [x] Redis caching of the feed, invalidated when the profile changes
 
 **Practicals you build first:** 10 Jenkins jobs · 11 Jenkins multibranch · 14 unit tests (Python half: the existing pytest suite)
 
@@ -153,7 +153,7 @@ For **each** of practicals 1–10, in your own lab file:
 | # | Practical | Built first by | Status |
 |---|---|---|---|
 | 1 | JWT session management | Garvit | ✅ built |
-| 2 | Google OAuth 2.0 login | Garvit | 🟡 redirect built, token exchange left |
+| 2 | Google OAuth 2.0 login | Garvit | ✅ built (needs Google credentials to run live) |
 | 3 | OAuth / API access control | Garvit | ✅ built (RBAC + 5 schemes) |
 | 4 | OpenAPI documentation | Garvit | ✅ built (Swagger) |
 | 5 | Docker Swarm | Taher | ⬜ |

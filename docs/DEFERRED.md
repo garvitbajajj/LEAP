@@ -8,9 +8,9 @@ independent of the others, so all four members can work in parallel.
 
 | # | Item | Where it plugs in |
 |---|---|---|
-| 1 | **Google OAuth token exchange.** The redirect leg and CSRF `state` check are built; the callback must exchange the code for tokens once Google credentials are issued. | `server/src/auth/routes.js` - `/auth/google/callback` |
-| 2 | **Refresh-token rotation with reuse detection.** Today a single 2-hour JWT is issued. Add a 15-minute access token plus an HttpOnly refresh cookie, rotated on use, with a jti denylist. | `server/src/middleware/auth.js`, `client/src/api.js` |
-| 3 | **Password reset by email.** Single-use, hashed, time-limited reset tokens. | `server/src/auth/routes.js` |
+| 1 | **Google OAuth token exchange.** [COMPLETED] Authorization code flow with PKCE (S256) and a CSRF `state` cookie; the callback exchanges the code, requires a verified Google email, then signs in, links or creates the user. No token ever appears in a URL. Needs `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` to go live. | `server/src/auth/google.js`, `server/src/auth/routes.js` |
+| 2 | **Refresh-token rotation with reuse detection.** [COMPLETED] 15-minute access JWT plus a hashed, HttpOnly refresh cookie rotated on every use. Replaying a retired token revokes its whole family, with a 10-second grace window for concurrent tabs. The client refreshes silently with one shared request. | `server/src/auth/sessions.js`, `client/src/api.js` |
+| 3 | **Password reset by email.** [COMPLETED] Single-use, hashed, 30-minute tokens; identical replies whether or not the account exists; a reset revokes every session. Sends through SMTP when configured, otherwise logs the link. | `server/src/auth/passwordReset.js`, `server/src/auth/mailer.js` |
 
 ## V2 - Dhruvika Bansal · Content Catalogue & Discovery
 
@@ -26,7 +26,7 @@ independent of the others, so all four members can work in parallel.
 |---|---|---|
 | 1 | **ALS matrix-factorisation collaborative filtering.** [COMPLETED] Implemented implicit ALS matrix factorisation (Hu-Koren-Volinsky) in `ml/app/als.py` and `ml/app/model.py`, replacing dense item-item cosine similarity with 16 latent factors and O(N*k) projection scaling. | `ml/app/model.py`, `ml/app/als.py` |
 | 2 | **Jenkins multibranch pipeline.** [COMPLETED] Added `Jenkinsfile.multibranch` with 11 declarative stages, branch-conditional SonarQube, Docker build/push, manual approval gate on `main`, and GitHub webhook trigger. | `Jenkinsfile.multibranch` (new), `docs/JENKINS_WEBHOOK_SETUP.md` (new) |
-| 3 | **Redis response caching** for the feed, invalidated when the learner's profile changes. | `server/src/recommendations/routes.js` |
+| 3 | **Redis response caching.** [COMPLETED] Per-learner versioned feed cache with a 5-minute TTL, invalidated on completions, likes, skips, bookmarks, quizzes, feedback and profile edits; fallback feeds are never cached, and the API keeps working if Redis is down. About 10x faster on a hit (109 ms to 9 ms locally). | `server/src/recommendations/cache.js`, `server/src/redis.js` |
 
 ## V4 - Taher Mohammed Husain Aurangabadi · Learning Path, Mastery & Analytics
 
