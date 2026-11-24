@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# builds
+dist/
+build/
+coverage/
+.pytest_cache/
+htmlcov/
+
+# env and secrets
+.env
+*.pem
+*.key
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
