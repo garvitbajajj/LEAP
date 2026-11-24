@@ -1,4 +1,6 @@
-/** Mounts every vertical's router. Each vertical adds its own line here. */
+/** Mounts every vertical's router under /api/v1. */
 module.exports = function mountRoutes(app) {
   app.get('/', (req, res) => res.json({ name: 'LEAP API', docs: '/api/v1/docs' }));
+
+  app.use('/api/v1', require('./auth/routes'));
 };
