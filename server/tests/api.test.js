@@ -90,9 +90,15 @@ describe('authentication schemes', () => {
   });
 
   test('oauth2 reports that Google is not configured', async () => {
-    const res = await request(app).get('/api/v1/auth/google');
-    expect(res.status).toBe(501);
-    expect(res.body.error.code).toBe('OAUTH_NOT_CONFIGURED');
+    const prevId = config.google.clientId;
+    config.google.clientId = '';
+    try {
+      const res = await request(app).get('/api/v1/auth/google');
+      expect(res.status).toBe(501);
+      expect(res.body.error.code).toBe('OAUTH_NOT_CONFIGURED');
+    } finally {
+      config.google.clientId = prevId;
+    }
   });
 
   test('refresh without a cookie is rejected before touching the database', async () => {

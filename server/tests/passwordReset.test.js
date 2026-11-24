@@ -3,6 +3,7 @@ const request = require('supertest');
 const { createResetToken, resetTokenQuery, RESET_TTL_MS } = require('../src/auth/passwordReset');
 const { sha256 } = require('../src/middleware/auth');
 const { sendMail } = require('../src/auth/mailer');
+const config = require('../src/config');
 const { createApp } = require('../src/app');
 
 describe('password reset tokens', () => {
@@ -30,7 +31,13 @@ describe('password reset tokens', () => {
 
 describe('development mailer', () => {
   test('without SMTP configured it logs instead of failing', async () => {
-    await expect(sendMail({ to: 'a@b.co', subject: 's', text: 't' })).resolves.toEqual({ delivered: false });
+    const prevHost = config.smtp.host;
+    config.smtp.host = '';
+    try {
+      await expect(sendMail({ to: 'a@b.co', subject: 's', text: 't' })).resolves.toEqual({ delivered: false });
+    } finally {
+      config.smtp.host = prevHost;
+    }
   });
 });
 
