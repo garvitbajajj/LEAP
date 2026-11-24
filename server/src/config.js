@@ -8,7 +8,9 @@ module.exports = {
   mongoUri: env('MONGO_URI', 'mongodb://127.0.0.1:27017/leap'),
   corsOrigins: env('CORS_ORIGINS', 'http://localhost:5173').split(',').map((s) => s.trim()),
   jwtSecret: env('JWT_SECRET', 'dev-only-insecure-secret'),
-  jwtExpiresIn: env('JWT_EXPIRES_IN', '2h'),
+  jwtExpiresIn: env('JWT_EXPIRES_IN', '15m'),
+  refreshTtlDays: Number(env('REFRESH_TTL_DAYS', 7)),
+  clientUrl: env('CLIENT_URL', 'http://localhost:5173'),
   internalBearerToken: env('INTERNAL_BEARER_TOKEN', 'leap-internal-dev-token'),
   bootstrap: {
     enabled: env('BOOTSTRAP_ENABLED', 'true') === 'true',

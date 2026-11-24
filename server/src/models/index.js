@@ -145,6 +145,18 @@ const ApiKeySchema = new Schema({
   lastUsedAt: Date,
 }, opts);
 
+// ---------------------------------------------------------------- RefreshToken (sessions)
+const RefreshTokenSchema = new Schema({
+  userId: { type: ObjectId, ref: 'User', required: true, index: true },
+  tokenHash: { type: String, required: true, unique: true }, // sha256 - the raw token is never stored
+  familyId: { type: String, required: true, index: true }, // every rotation of one login shares this
+  expiresAt: { type: Date, required: true },
+  revokedAt: { type: Date, default: null },
+  replacedBy: String, // hash of the token that superseded this one
+}, { timestamps: true, versionKey: false });
+// MongoDB deletes each token a day after it expires; until then it still detects reuse.
+RefreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 86_400 });
+
 // ---------------------------------------------------------------- AuditLog
 const AuditLogSchema = new Schema({
   actorId: { type: ObjectId, ref: 'User' },
@@ -165,5 +177,6 @@ module.exports = {
   Feedback: model('Feedback', FeedbackSchema),
   LearningPath: model('LearningPath', LearningPathSchema),
   ApiKey: model('ApiKey', ApiKeySchema),
+  RefreshToken: model('RefreshToken', RefreshTokenSchema),
   AuditLog: model('AuditLog', AuditLogSchema),
 };
