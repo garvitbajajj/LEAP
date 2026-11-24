@@ -31,6 +31,7 @@ pipeline {
   }
 
   options {
+    disableConcurrentBuilds()
     timestamps()
     timeout(time: 30, unit: 'MINUTES')
     buildDiscarder(logRotator(numToKeepStr: '20'))
@@ -40,6 +41,7 @@ pipeline {
     REGISTRY = 'docker.io/garvitbajajj'
     TAG = "${env.BUILD_NUMBER}"
     CONTENT_ENCODER = 'tfidf'
+    COMPOSE_PARALLEL_LIMIT = '1'
   }
 
   stages {
@@ -180,7 +182,8 @@ pipeline {
     stage('Deploy') {
       steps {
         runCmd('docker compose -p leap down --remove-orphans')
-        runCmd('docker compose -p leap up -d --build --wait')
+        runCmd('docker compose -p leap build')
+        runCmd('docker compose -p leap up -d --wait')
         script {
           def rawOut = ''
           if (isUnix()) {
