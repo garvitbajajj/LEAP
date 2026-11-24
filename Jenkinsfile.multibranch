@@ -59,7 +59,42 @@ pipeline {
   }
 
   stages {
-    // stages will be added in subsequent commits
+
+    // ─── 1. Checkout ──────────────────────────────────────────────────────
+    stage('Checkout') {
+      steps {
+        checkout scm
+        script {
+          env.GIT_COMMIT_SHORT = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+          env.GIT_AUTHOR      = sh(script: "git log -1 --pretty='%an <%ae>'", returnStdout: true).trim()
+          echo "Branch: ${env.BRANCH_NAME}  Commit: ${env.GIT_COMMIT_SHORT}  Author: ${env.GIT_AUTHOR}"
+        }
+      }
+    }
+
+    // ─── 2. Install dependencies (parallel) ──────────────────────────────
+    stage('Install') {
+      parallel {
+        stage('server') {
+          steps { dir('server') { sh 'npm ci --prefer-offline' } }
+        }
+        stage('client') {
+          steps { dir('client') { sh 'npm ci --prefer-offline' } }
+        }
+        stage('ml') {
+          steps {
+            dir('ml') {
+              sh '''
+                python3 -m venv .venv
+                .venv/bin/pip install --quiet --upgrade pip
+                .venv/bin/pip install --quiet -r requirements.txt
+              '''
+            }
+          }
+        }
+      }
+    }
+
   }
 
   post {
