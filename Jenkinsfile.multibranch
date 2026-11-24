@@ -95,6 +95,73 @@ pipeline {
       }
     }
 
+    // ─── 3. Lint ──────────────────────────────────────────────────────────
+    stage('Lint') {
+      steps {
+        dir('server') { sh 'npm run lint' }
+      }
+    }
+
+    // ─── 4. Test (parallel across all three services) ────────────────────
+    stage('Unit Test') {
+      parallel {
+        stage('server - jest') {
+          steps {
+            dir('server') {
+              sh 'npx jest --ci --coverage --coverageDirectory=coverage --coverageReporters=lcov,text'
+            }
+          }
+          post {
+            always {
+              junit allowEmptyResults: true, testResults: 'server/jest-results.xml'
+              publishHTML(target: [
+                allowMissing: true,
+                alwaysLinkToLastBuild: false,
+                keepAll: true,
+                reportDir: 'server/coverage/lcov-report',
+                reportFiles: 'index.html',
+                reportName: 'Server Coverage'
+              ])
+            }
+          }
+        }
+
+        stage('ml - pytest') {
+          steps {
+            dir('ml') {
+              sh '.venv/bin/python -m pytest -q --junitxml=pytest-results.xml --cov=app --cov-report=xml:coverage.xml --cov-report=html:htmlcov'
+            }
+          }
+          post {
+            always {
+              junit allowEmptyResults: true, testResults: 'ml/pytest-results.xml'
+              publishHTML(target: [
+                allowMissing: true,
+                alwaysLinkToLastBuild: false,
+                keepAll: true,
+                reportDir: 'ml/htmlcov',
+                reportFiles: 'index.html',
+                reportName: 'ML Coverage'
+              ])
+            }
+          }
+        }
+
+        stage('client - vitest') {
+          steps {
+            dir('client') {
+              sh 'npx vitest run --reporter=junit --outputFile=vitest-results.xml'
+            }
+          }
+          post {
+            always {
+              junit allowEmptyResults: true, testResults: 'client/vitest-results.xml'
+            }
+          }
+        }
+      }
+    }
+
   }
 
   post {
