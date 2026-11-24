@@ -199,6 +199,22 @@ class Model:
             "cfMethod": self.cf_method, "latentFactors": config.ALS_FACTORS,
         }
 
+    def replace_with(self, other: Model) -> None:
+        """Atomically replace this model's state with another fitted model."""
+        with self._lock, other._lock:
+            self.items = dict(other.items)
+            self.ids = list(other.ids)
+            self.index = dict(other.index)
+            self.vectorizer = other.vectorizer
+            self.content = other.content
+            self.cf_sim = other.cf_sim
+            self.interaction_rows = other.interaction_rows
+            self.source = other.source
+            self.trained_at = other.trained_at
+            self.version = other.version
+        self._write_registry()
+        log.info("model replaced with candidate version %s", self.version)
+
 
 def _get(url: str) -> dict:
     req = urllib.request.Request(url, headers={"X-API-Key": config.LEAP_API_KEY})

@@ -1,0 +1,25 @@
+# Prometheus configuration for LEAP Platform
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "/etc/prometheus/alert-rules.yml"
+
+scrape_configs:
+  # LEAP Express.js API server
+  - job_name: "server"
+    static_configs:
+      - targets: ["server:4000"]
+    metrics_path: /metrics
+
+  # LEAP ML service (FastAPI)
+  - job_name: "ml"
+    static_configs:
+      - targets: ["ml:8000"]
+    metrics_path: /metrics
+
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

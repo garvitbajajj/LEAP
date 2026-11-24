@@ -146,3 +146,33 @@ def test_recommend_honours_the_c3_contract(client):
 def test_metrics_are_prometheus_text(client):
     client.get("/health")
     assert "ml_requests_total" in client.get("/metrics").text
+
+
+def test_evaluate_requires_api_key(client):
+    assert client.post("/ml/v1/evaluate").status_code == 401
+    assert client.post("/ml/v1/evaluate", headers={"X-API-Key": "wrong"}).status_code == 401
+
+
+def test_evaluate_endpoint_with_mocked_api(client, monkeypatch):
+    import app.main as main_mod
+
+    def mock_get(url):
+        if "catalogue" in url:
+            return {"items": CATALOGUE}
+        if "interactions" in url:
+            return {"rows": INTERACTIONS}
+        return {}
+
+    monkeypatch.setattr(main_mod, "_get", mock_get, raising=False)
+    # Also patch in model module where _get is defined
+    import app.model as model_mod
+    monkeypatch.setattr(model_mod, "_get", mock_get)
+
+    res = client.post("/ml/v1/evaluate", headers={"X-API-Key": "test-key"})
+    assert res.status_code == 200
+    data = res.json()
+    assert "activated" in data
+    assert "reason" in data
+    assert "activeModel" in data
+    assert "comparison" in data
+    assert "gate" in data
