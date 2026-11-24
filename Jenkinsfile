@@ -179,6 +179,7 @@ pipeline {
 
     stage('Deploy') {
       steps {
+        runCmd('docker compose -p leap down --remove-orphans')
         runCmd('docker compose -p leap up -d --build --wait')
         script {
           def rawOut = ''
