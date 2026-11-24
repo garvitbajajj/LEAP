@@ -177,4 +177,6 @@ p { margin: 0 0 12px; }
   .auth-hero { display: none; }
   .nav-links { display: none; }
   .factor { grid-template-columns: 110px 1fr 40px; }
+  .item-layout { grid-template-columns: 1fr !important; }
 }
+fieldset.card { border: 1px solid var(--line); }
