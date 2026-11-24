@@ -1,0 +1,71 @@
+﻿// LEAP — Multibranch Declarative Pipeline
+// Author : Abhishek Vijay Kakde · V3 Recommendations & Feed
+//
+// Branch behaviour
+// ─────────────────────────────────────────────────────────────────────────
+//  Any branch   │ Checkout → Install → Lint → Test (parallel) → Build
+//  feature/*    │ + SonarQube scan (non-blocking)
+//  develop      │ + SonarQube scan (blocking gate) → Docker build
+//  main         │ + Docker build → Push → Manual approval gate → Deploy
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Required Jenkins plugins:
+//   Pipeline Multibranch        — multibranch project support
+//   Git / GitHub Branch Source  — branch discovery & webhook trigger
+//   NodeJS                      — tool "node20"
+//   JUnit                       — test result publishing
+//   HTML Publisher              — coverage report publishing
+//   SonarQube Scanner           — optional static analysis
+//   Docker Pipeline             — docker build/push steps
+//
+// Required Jenkins credentials:
+//   dockerhub         — Username/Password for Docker Hub push
+//   sonar-token       — Secret text with the SonarQube project token
+//
+// Required Jenkins tools:
+//   NodeJS "node20"   — configure in Manage Jenkins > Tools
+
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+    timeout(time: 45, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '5'))
+    skipDefaultCheckout(false)
+    // Throttle to prevent concurrent runs on the same branch overwriting each other's Docker tags
+    disableConcurrentBuilds(abortPrevious: true)
+  }
+
+  tools {
+    nodejs 'node20'
+  }
+
+  environment {
+    REGISTRY     = 'docker.io/garvitbajajj'
+    IMAGE_TAG    = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
+    SONAR_URL    = 'http://localhost:9000'
+    // Which branches are allowed to push & deploy
+    DEPLOY_BRANCHES = 'main'
+    STAGING_BRANCHES = 'develop'
+  }
+
+  // ─── GitHub webhook trigger ──────────────────────────────────────────────
+  // Requires the GitHub Branch Source plugin and a GitHub webhook pointing at:
+  //   http://<JENKINS_URL>/multibranch-webhook-trigger/invoke?token=<TOKEN>
+  // See docs/JENKINS_WEBHOOK_SETUP.md for the full setup procedure.
+  triggers {
+    githubPush()
+  }
+
+  stages {
+    // stages will be added in subsequent commits
+  }
+
+  post {
+    always {
+      echo "Pipeline finished — branch: ${env.BRANCH_NAME}"
+    }
+  }
+
+}
