@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: leap-config
+  namespace: leap
+  labels:
+    app.kubernetes.io/part-of: leap
+data:
+  MONGO_URI: "mongodb://mongo:27017/leap"
+  ML_URL: "http://ml:8000"
+  LEAP_API_URL: "http://server:4000/api/v1"
+  CORS_ORIGINS: "https://leap.example.com"

@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.security import APIKeyHeader
 
 from . import config
-from .model import MODEL
+from .model import MODEL, Model
 from .recommender import rank
 from .schemas import EmbedRequest, RecommendRequest, RecommendResponse
 
@@ -103,6 +103,85 @@ def retrain():
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=503, detail={"code": "RETRAIN_FAILED", "message": str(exc)}) from exc
     return MODEL.describe()
+
+
+@app.post("/ml/v1/evaluate", tags=["Model"], dependencies=[Depends(require_api_key)])
+def evaluate(
+    primary_metric: str = "ndcg",
+    primary_k: int = 10,
+    min_improvement: float = 0.01,
+    force_activate: bool = False,
+):
+    """
+    Run offline evaluation harness and retraining gate.
+    Evaluates candidate model against popularity and content-only baselines;
+    activates the retrained model only if it beats the current active one.
+    """
+    from eval.gate import log_decision, should_activate
+    from eval.harness import OfflineEvaluator
+    from .model import Model, _get
+
+    try:
+        catalogue = _get(f"{config.LEAP_API_URL}/internal/catalogue")["items"]
+        interactions = _get(f"{config.LEAP_API_URL}/internal/interactions")["rows"]
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "FETCH_FAILED", "message": f"Could not fetch evaluation data from LEAP API: {exc}"},
+        ) from exc
+
+    if not catalogue:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "EMPTY_CATALOGUE", "message": "Catalogue from LEAP API is empty"},
+        )
+
+    evaluator = OfflineEvaluator(catalogue=catalogue, interactions=interactions)
+    candidate_model = Model()
+    candidate_model.fit(catalogue, evaluator.train_interactions, source="eval-candidate")
+
+    # Evaluate candidate and baselines
+    results = evaluator.compare(candidate_model, k_values=[5, 10, 20])
+    candidate_metrics = results.get("hybrid_model", {})
+
+    # Evaluate current model if fitted
+    if MODEL.fitted:
+        current_metrics = evaluator.evaluate_model(MODEL, k_values=[5, 10, 20])
+    else:
+        current_metrics = results.get("baselines", {}).get("popularity", {})
+
+    passed, reason = should_activate(
+        current_metrics=current_metrics,
+        candidate_metrics=candidate_metrics,
+        primary_metric=primary_metric,
+        primary_k=primary_k,
+        min_improvement=min_improvement,
+    )
+
+    should_swap = passed or force_activate or (not MODEL.fitted)
+    decision_reason = reason if not force_activate else f"Forced activation: {reason}"
+
+    if should_swap:
+        # Fit on full data for active serving
+        full_candidate = Model()
+        full_candidate.fit(catalogue, interactions, source="gated-retrain-active")
+        MODEL.replace_with(full_candidate)
+
+    gate_log = log_decision(
+        decision=should_swap,
+        reason=decision_reason,
+        current_metrics=current_metrics,
+        candidate_metrics=candidate_metrics,
+        log_dir=config.REGISTRY_DIR,
+    )
+
+    return {
+        "activated": should_swap,
+        "reason": decision_reason,
+        "activeModel": MODEL.describe(),
+        "comparison": results,
+        "gate": gate_log,
+    }
 
 
 @app.get("/ml/v1/models", tags=["Model"], dependencies=[Depends(require_api_key)])
