@@ -11,6 +11,8 @@ module.exports = {
   jwtExpiresIn: env('JWT_EXPIRES_IN', '15m'),
   refreshTtlDays: Number(env('REFRESH_TTL_DAYS', 7)),
   clientUrl: env('CLIENT_URL', 'http://localhost:5173'),
+  redisUrl: env('REDIS_URL', ''),
+  feedCacheTtlSeconds: Number(env('FEED_CACHE_TTL_SECONDS', 300)),
   smtp: {
     host: env('SMTP_HOST', ''),
     port: Number(env('SMTP_PORT', 587)),
