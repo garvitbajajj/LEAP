@@ -26,8 +26,8 @@ services:
       ML_API_KEY: ${ML_API_KEY:-leap-dev-ml-key}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       INTERNAL_BEARER_TOKEN: ${INTERNAL_BEARER_TOKEN:-leap-internal-dev-token}
-      CORS_ORIGINS: http://localhost:8080
-      CLIENT_URL: http://localhost:8080
+      CORS_ORIGINS: http://localhost:8080,https://localhost:8443
+      CLIENT_URL: https://localhost:8443
       REDIS_URL: redis://redis:6379
     ports:
       - "4000:4000"
@@ -65,6 +65,7 @@ services:
     restart: unless-stopped
     ports:
       - "8080:80"
+      - "8443:443"
     depends_on:
       - server
 

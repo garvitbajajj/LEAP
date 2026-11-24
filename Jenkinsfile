@@ -38,6 +38,17 @@ pipeline {
         stage('server - jest')  { steps { dir('server') { sh 'npx jest --ci --coverage' } } }
         stage('ml - pytest')    { steps { dir('ml')     { sh 'python3 -m pytest -q --junitxml=pytest-results.xml' } } }
         stage('client - vitest'){ steps { dir('client') { sh 'npx vitest run' } } }
+        stage('e2e - maven')    { steps { dir('tests/e2e') { sh 'mvn -B test' } } }
+      }
+    }
+
+    stage('API & E2E (live stack)') {
+      when { expression { env.LEAP_E2E_URL?.trim() } }
+      steps {
+        sh 'npx --yes newman run postman/LEAP.postman_collection.json -e postman/LEAP.local.postman_environment.json --env-var "baseUrl=${LEAP_E2E_URL}" --env-var "apiBase=${LEAP_E2E_URL}/api/v1" --insecure --reporters cli,junit --reporter-junit-export postman/newman-report.xml'
+        dir('tests/e2e') {
+          sh 'mvn -B verify -Dleap.baseUrl=${LEAP_E2E_URL} -Dleap.headless=true'
+        }
       }
     }
 
@@ -71,8 +82,8 @@ pipeline {
 
   post {
     always {
-      junit allowEmptyResults: true, testResults: 'ml/pytest-results.xml'
-      archiveArtifacts allowEmptyArchive: true, artifacts: 'server/coverage/**'
+      junit allowEmptyResults: true, testResults: 'ml/pytest-results.xml,tests/e2e/target/surefire-reports/*.xml,tests/e2e/target/failsafe-reports/*.xml,postman/newman-report.xml'
+      archiveArtifacts allowEmptyArchive: true, artifacts: 'server/coverage/**,tests/e2e/target/screenshots/**'
     }
     success { echo 'LEAP pipeline passed' }
     failure { echo 'LEAP pipeline failed - check the stage logs above' }

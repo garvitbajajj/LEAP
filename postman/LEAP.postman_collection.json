@@ -1,0 +1,791 @@
+{
+  "info": {
+    "name": "LEAP API (Complete Collection)",
+    "_postman_id": "8c5d91b4-3f6e-4f13-93ce-71e3f25a0001",
+    "description": "Full Postman collection for LEAP (Learning Engine for Adaptive Personalization) covering all 5 authentication schemes, catalogue, bulk CSV import, recommendations, learning paths, events, analytics, and admin endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-login as learner if jwtToken is not yet set in the environment",
+          "if (!pm.environment.get('jwtToken') && !pm.request.url.toString().includes('/auth/login')) {",
+          "  pm.sendRequest({",
+          "    url: pm.environment.get('apiBase') + '/auth/login',",
+          "    method: 'POST',",
+          "    header: { 'Content-Type': 'application/json' },",
+          "    body: {",
+          "      mode: 'raw',",
+          "      raw: JSON.stringify({",
+          "        email: pm.environment.get('learnerEmail'),",
+          "        password: pm.environment.get('learnerPassword')",
+          "      })",
+          "    }",
+          "  }, function (err, res) {",
+          "    if (!err && res.code === 200) {",
+          "      var json = res.json();",
+          "      if (json.token) pm.environment.set('jwtToken', json.token);",
+          "    }",
+          "  });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Platform & OpenAPI",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": { "method": "GET", "url": "{{baseUrl}}/health" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Reports mongo and version', function () {",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('mongo');",
+                  "  pm.expect(body).to.have.property('version');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Prometheus Metrics",
+          "request": { "method": "GET", "url": "{{baseUrl}}/metrics" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Exposes http_request_duration_seconds', function () {",
+                  "  pm.expect(pm.response.text()).to.include('http_request_duration_seconds');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "OpenAPI JSON Spec",
+          "request": { "method": "GET", "url": "{{apiBase}}/openapi.json" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Declares all 5 security schemes', function () {",
+                  "  var schemes = Object.keys(pm.response.json().components.securitySchemes);",
+                  "  pm.expect(schemes).to.include.members(['basicAuth', 'bearerAuth', 'jwtAuth', 'apiKeyAuth', 'oauth2']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Auth (All 5 Schemes)",
+      "item": [
+        {
+          "name": "Get Auth Providers",
+          "request": { "method": "GET", "url": "{{apiBase}}/auth/providers" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Password login enabled', function () { pm.expect(pm.response.json().password).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as Learner (jwtAuth)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{learnerEmail}}\",\n  \"password\": \"{{learnerPassword}}\"\n}" },
+            "url": "{{apiBase}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "var data = pm.response.json();",
+                  "pm.test('Returns JWT and learner user', function () {",
+                  "  pm.expect(data.token).to.be.a('string');",
+                  "  pm.expect(data.user.role).to.eql('learner');",
+                  "});",
+                  "pm.environment.set('jwtToken', data.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as Instructor (jwtAuth)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{instructorEmail}}\",\n  \"password\": \"{{instructorPassword}}\"\n}" },
+            "url": "{{apiBase}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "var data = pm.response.json();",
+                  "pm.environment.set('instructorToken', data.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as Admin (jwtAuth)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}" },
+            "url": "{{apiBase}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "var data = pm.response.json();",
+                  "pm.environment.set('adminToken', data.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh JWT (HttpOnly cookie)",
+          "request": { "method": "POST", "url": "{{apiBase}}/auth/refresh" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 200 with rotated JWT or 401 without cookie', function () {",
+                  "  pm.expect([200, 401]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) pm.environment.set('jwtToken', pm.response.json().token);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot Password (Generic Anti-Enumeration)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{learnerEmail}}\"\n}" },
+            "url": "{{apiBase}}/auth/forgot-password"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns generic message', function () { pm.expect(pm.response.json()).to.have.property('message'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Current User (/me)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }],
+            "url": "{{apiBase}}/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Contains user and profile', function () {",
+                  "  var d = pm.response.json();",
+                  "  pm.expect(d).to.have.property('user');",
+                  "  pm.expect(d).to.have.property('profile');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Record Consent",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }],
+            "url": "{{apiBase}}/me/consent"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('consentGivenAt present', function () { pm.expect(pm.response.json()).to.have.property('consentGivenAt'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Internal Status (bearerAuth)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{internalBearerToken}}" }],
+            "url": "{{apiBase}}/internal/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns counts', function () { pm.expect(pm.response.json()).to.have.property('counts'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Internal Catalogue Export (apiKeyAuth)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{mlApiKey}}" }],
+            "url": "{{apiBase}}/internal/catalogue"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns published items', function () { pm.expect(pm.response.json().items).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Bootstrap Check (basicAuth)",
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{bootstrapUser}}", "type": "string" },
+                { "key": "password", "value": "{{bootstrapPassword}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"bootstrap@leap.dev\",\n  \"password\": \"Bootstrap@123\"\n}" },
+            "url": "{{apiBase}}/admin/bootstrap"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 201 (fresh DB) or 409 (already seeded)', function () {",
+                  "  pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Catalogue & Bulk CSV Import",
+      "item": [
+        {
+          "name": "Browse & Search Catalogue",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }],
+            "url": "{{apiBase}}/catalogue/items?q=Python&limit=12"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "var d = pm.response.json();",
+                  "pm.test('Returns paginated items', function () {",
+                  "  pm.expect(d.items).to.be.an('array');",
+                  "  pm.expect(d.total).to.be.a('number');",
+                  "});",
+                  "if (d.items.length > 0) pm.environment.set('sampleItemId', d.items[0]._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Catalogue Skills",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }],
+            "url": "{{apiBase}}/catalogue/skills"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns array of skill slugs', function () { pm.expect(pm.response.json()).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Prerequisite DAG",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }],
+            "url": "{{apiBase}}/catalogue/graph"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Has nodes and edges', function () {",
+                  "  var g = pm.response.json();",
+                  "  pm.expect(g.nodes).to.be.an('array');",
+                  "  pm.expect(g.edges).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bulk CSV Import — Dry-Run Preview (Valid)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{instructorToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dryRun\": true,\n  \"csv\": \"title,description,type,skills,difficulty,durationMins,status,prerequisites\\n\\\"Newman Smoke Lesson\\\",\\\"Previewed via Postman\\\",article,sql,2,15,draft,\\n\\\"Newman Follow-up\\\",\\\"Chained prereq\\\",video,sql,3,20,draft,\\\"Newman Smoke Lesson\\\"\"\n}"
+            },
+            "url": "{{apiBase}}/catalogue/import?dryRun=true"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "var r = pm.response.json();",
+                  "pm.test('Preview passes with zero errors', function () {",
+                  "  pm.expect(r.dryRun).to.eql(true);",
+                  "  pm.expect(r.validCount).to.eql(2);",
+                  "  pm.expect(r.errorCount).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bulk CSV Import — Cycle Detection Preview",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{instructorToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dryRun\": true,\n  \"csv\": \"title,type,skills,difficulty,prerequisites\\nCycle Alpha,course,sql,2,Cycle Beta\\nCycle Beta,course,sql,2,Cycle Alpha\"\n}"
+            },
+            "url": "{{apiBase}}/catalogue/import?dryRun=true"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 dry-run report', function () { pm.response.to.have.status(200); });",
+                  "var r = pm.response.json();",
+                  "pm.test('Detects cycle in preview', function () {",
+                  "  pm.expect(r.cycle).to.be.an('array');",
+                  "  pm.expect(r.errorCount).to.eql(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Draft Content Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{instructorToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Postman Created Draft {{$timestamp}}\",\n  \"description\": \"Smoke test draft item\",\n  \"type\": \"article\",\n  \"skills\": [\"sql\"],\n  \"difficulty\": 2,\n  \"durationMins\": 15\n}"
+            },
+            "url": "{{apiBase}}/catalogue/items"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
+                  "var it = pm.response.json();",
+                  "pm.environment.set('createdItemId', it._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publish Created Item",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{instructorToken}}" }],
+            "url": "{{apiBase}}/catalogue/items/{{createdItemId}}/publish"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Item published', function () { pm.expect(pm.response.json().status).to.eql('published'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retire Created Item",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{instructorToken}}" }],
+            "url": "{{apiBase}}/catalogue/items/{{createdItemId}}/retire"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Item retired', function () { pm.expect(pm.response.json().status).to.eql('retired'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Recommendations & Feedback",
+      "item": [
+        {
+          "name": "Get Personalised Feed (C2)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }],
+            "url": "{{apiBase}}/recommendations?limit=8"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "var feed = pm.response.json();",
+                  "pm.test('Honours C2 contract with reason per item', function () {",
+                  "  pm.expect(['hybrid', 'cold_start', 'fallback']).to.include(feed.strategy);",
+                  "  pm.expect(feed.items).to.be.an('array');",
+                  "  if (feed.items.length > 0) {",
+                  "    pm.expect(feed.items[0]).to.have.property('reason');",
+                  "    pm.environment.set('recItemId', feed.items[0].itemId);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Submit Recommendation Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemId\": \"{{sampleItemId}}\",\n  \"verdict\": \"relevant\",\n  \"rating\": 5\n}"
+            },
+            "url": "{{apiBase}}/feedback"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Learning Path & Events",
+      "item": [
+        {
+          "name": "List Goals",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }],
+            "url": "{{apiBase}}/goals"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns goals array', function () { pm.expect(pm.response.json().length).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Active Learning Path",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }],
+            "url": "{{apiBase}}/paths/active"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "var p = pm.response.json();",
+                  "pm.test('Has summary and steps', function () {",
+                  "  pm.expect(p).to.have.property('summary');",
+                  "  pm.expect(p.steps).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ingest Interaction Events (C1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"events\": [\n    {\n      \"eventId\": \"newman-{{$guid}}\",\n      \"itemId\": \"{{sampleItemId}}\",\n      \"type\": \"view\",\n      \"dwellSeconds\": 45\n    }\n  ]\n}"
+            },
+            "url": "{{apiBase}}/events"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202', function () { pm.response.to.have.status(202); });",
+                  "pm.test('Event accepted', function () { pm.expect(pm.response.json().accepted).to.eql(1); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Analytics & Admin",
+      "item": [
+        {
+          "name": "Analytics Overview (Instructor/Admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{instructorToken}}" }],
+            "url": "{{apiBase}}/analytics/overview"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Includes recommendationQuality', function () { pm.expect(pm.response.json()).to.have.property('recommendationQuality'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "RBAC Check: Learner Denied on Admin Users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwtToken}}" }],
+            "url": "{{apiBase}}/admin/users"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Learner blocked with 403 FORBIDDEN', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Users (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{apiBase}}/admin/users"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns user list', function () { pm.expect(pm.response.json()).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List API Keys (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{apiBase}}/admin/api-keys"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit Log (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{apiBase}}/admin/audit"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns audit entries', function () { pm.expect(pm.response.json()).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

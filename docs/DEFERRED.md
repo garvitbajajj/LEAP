@@ -16,9 +16,9 @@ independent of the others, so all four members can work in parallel.
 
 | # | Item | Where it plugs in |
 |---|---|---|
-| 1 | **Selenium end-to-end suite.** Page Object Model, explicit waits, the seven scenarios in the work division, JUnit XML for Jenkins. | `tests/e2e/` (new) |
-| 2 | **HTTPS reverse proxy and Postman collection.** TLS termination at Nginx with an HTTP to HTTPS redirect, plus a Postman collection run by newman in CI. The plain-HTTP Nginx config already exists. | `client/nginx.conf`, `postman/` (new) |
-| 3 | **Bulk CSV import with a dry-run preview**, and upgrading content vectors from TF-IDF to sentence-transformer embeddings. | `server/src/catalogue/routes.js`, `ml/app/model.py` |
+| 1 | **Selenium end-to-end suite.** [COMPLETED] Java + Maven + JUnit 5 suite with Page Object Model, explicit `WebDriverWait` only, headless Chrome, all 7 scenarios, screenshot-on-failure, and Surefire/Failsafe JUnit XML reports for Jenkins. | `tests/e2e/` |
+| 2 | **HTTPS reverse proxy and Postman collection.** [COMPLETED] Nginx TLS 1.2+ termination with HTTP → HTTPS redirect, self-signed certificate generation scripts & entrypoint, and full Postman v2.1 collection with auto-login pre-request script and Newman CI runner. | `client/nginx.conf`, `client/certs/`, `postman/` |
+| 3 | **Bulk CSV import with a dry-run preview**, and upgrading content vectors from TF-IDF to sentence-transformer embeddings. [COMPLETED] `POST /api/v1/catalogue/import` (`dryRun=true|false`) with RFC 4180 parsing, batch prerequisite resolution and DAG cycle checks + Admin UI uploader; plus `SentenceTransformerEncoder` (`all-MiniLM-L6-v2`) with automatic TF-IDF fallback in `ml/app/embeddings.py`. | `server/src/catalogue/csvImport.js`, `server/src/catalogue/routes.js`, `ml/app/embeddings.py`, `ml/app/model.py` |
 
 ## V3 - Abhishek Vijay Kakde · Personalised Recommendations & Feed
 

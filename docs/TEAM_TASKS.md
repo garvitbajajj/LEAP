@@ -90,13 +90,13 @@ These are cheap marks, and they're lost if only one person shows up in the histo
 ## Dhruvika Bansal — V2 Catalogue & Discovery · Epic KAN-5
 
 **Code (Testing 3)**
-- [ ] **Selenium suite in Java with Maven and JUnit** (`tests/e2e/`). This one task covers **practicals 12, 13 and 14**. It's the cleanest way to close the Java/Maven gap.
-  - [ ] Page Object Model, explicit waits only, headless Chrome
-  - [ ] Scenarios: register → consent → onboarding · feed shows a reason · search catalogue · complete a lesson and the path advances · quiz updates mastery · "Not for me" removes a card · learner blocked from `/admin`
-  - [ ] Screenshot on failure, plus a JUnit XML report for Jenkins
-- [ ] **HTTPS on Nginx**: self-signed certificate script, TLS 1.2+, HTTP → HTTPS redirect (`client/nginx.conf`)
-- [ ] **Postman collection** covering every endpoint, with an environment file, an auto-login pre-request script and tests; run it with `newman` in CI
-- [ ] Bulk CSV import with a dry-run preview
+- [x] **Selenium suite in Java with Maven and JUnit** (`tests/e2e/`). This one task covers **practicals 12, 13 and 14**. It's the cleanest way to close the Java/Maven gap.
+  - [x] Page Object Model, explicit waits only, headless Chrome
+  - [x] Scenarios: register → consent → onboarding · feed shows a reason · search catalogue · complete a lesson and the path advances · quiz updates mastery · "Not for me" removes a card · learner blocked from `/admin`
+  - [x] Screenshot on failure, plus a JUnit XML report for Jenkins
+- [x] **HTTPS on Nginx**: self-signed certificate script, TLS 1.2+, HTTP → HTTPS redirect (`client/nginx.conf`)
+- [x] **Postman collection** covering every endpoint, with an environment file, an auto-login pre-request script and tests; run it with `newman` in CI
+- [x] Bulk CSV import with a dry-run preview
 
 **Practicals you build first:** 12 Selenium · 13 Maven · 14 unit tests (Java half)
 
@@ -162,9 +162,9 @@ For **each** of practicals 1–10, in your own lab file:
 | 9 | Jira sprints and workflows | Garvit (all use it) | 🟡 epics only |
 | 10 | Jenkins build and deploy jobs | Abhishek | 🟡 Jenkinsfile written |
 | 11 | Jenkins multibranch pipeline | Abhishek | 🟡 Jenkinsfile.multibranch written |
-| 12 | Selenium browser automation | Dhruvika | ⬜ |
-| 13 | Maven Java build | Dhruvika | ⬜ |
-| 14 | Unit tests in Java and Python | Dhruvika (Java) · Abhishek (Python) | 🟡 Python done (65 tests) |
+| 12 | Selenium browser automation | Dhruvika | ✅ built (`tests/e2e/`) |
+| 13 | Maven Java build | Dhruvika | ✅ built (`tests/e2e/pom.xml`) |
+| 14 | Unit tests in Java and Python | Dhruvika (Java) · Abhishek (Python) | ✅ Java + Python done |
 | 15 | Prometheus + Grafana *(extra)* | Taher | 🟡 `/metrics` endpoints exist |
 | 16 | Ansible *(extra)* | Garvit | ⬜ |
 
