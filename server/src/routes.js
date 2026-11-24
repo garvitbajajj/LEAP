@@ -8,4 +8,5 @@ module.exports = function mountRoutes(app) {
   app.use('/api/v1', require('./path/routes'));
   app.use('/api/v1', require('./events/routes'));
   app.use('/api/v1', require('./recommendations/routes'));
+  app.use('/api/v1', require('./analytics/routes'));
 };
