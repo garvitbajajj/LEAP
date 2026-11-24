@@ -1,8 +1,8 @@
 # LEAP - full stack
 #   docker compose up -d --build                  start everything
 #   docker compose --profile seed run --rm seed   load the demo data (first run)
-#   open http://localhost:8080                    app
-#   open http://localhost:8080/api/v1/docs        Swagger
+#   open https://localhost:8443                   app (HTTPS; :8088 redirects to HTTPS)
+#   open https://localhost:8443/api/v1/docs       Swagger
 #   open http://localhost:8000/docs               ML service docs
 
 services:
@@ -26,7 +26,7 @@ services:
       ML_API_KEY: ${ML_API_KEY:-leap-dev-ml-key}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       INTERNAL_BEARER_TOKEN: ${INTERNAL_BEARER_TOKEN:-leap-internal-dev-token}
-      CORS_ORIGINS: http://localhost:8080,https://localhost:8443
+      CORS_ORIGINS: http://localhost:8088,https://localhost:8443
       CLIENT_URL: https://localhost:8443
       REDIS_URL: redis://redis:6379
     ports:
@@ -64,7 +64,7 @@ services:
     build: ./client
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "8088:80"
       - "8443:443"
     depends_on:
       - server
