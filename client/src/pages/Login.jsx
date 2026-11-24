@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '../api';
 import { useAuth } from '../auth';
 import { Logo } from '../components/Nav';
 import { Banner, Button, Card, Field } from '../components/ui';
@@ -9,12 +10,26 @@ const DEMO = [
   ['Admin', 'admin@leap.dev', 'Admin@1234'],
 ];
 
+// Reasons the Google callback sends back in ?oauth=...
+const OAUTH_ERRORS = {
+  denied: 'Google sign-in was cancelled.',
+  state_mismatch: 'Google sign-in expired or was tampered with. Please try again.',
+  failed: 'Google sign-in failed. Please try again or use your email and password.',
+};
+
 export default function Login() {
   const { login, register } = useAuth();
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({ name: '', email: '', password: '' });
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(() => OAUTH_ERRORS[new URLSearchParams(window.location.search).get('oauth')] || null);
   const [busy, setBusy] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+
+  useEffect(() => {
+    api('/auth/providers').then((p) => setGoogleEnabled(p.google)).catch(() => {});
+    // Drop ?oauth=... so a refresh does not re-show a stale error.
+    if (window.location.search.includes('oauth=')) window.history.replaceState(null, '', window.location.pathname);
+  }, []);
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
@@ -80,7 +95,9 @@ export default function Login() {
             <Button type="submit" block disabled={busy}>{busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'}</Button>
           </form>
 
-          <Button variant="ghost" block style={{ marginTop: 10 }} onClick={() => { window.location.href = '/api/v1/auth/google'; }}>
+          <Button variant="ghost" block style={{ marginTop: 10 }} disabled={!googleEnabled}
+            title={googleEnabled ? undefined : 'Google sign-in is not configured on this server'}
+            onClick={() => { window.location.href = '/api/v1/auth/google'; }}>
             Continue with Google
           </Button>
 

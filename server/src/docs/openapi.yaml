@@ -293,11 +293,25 @@ paths:
       security: []
       responses:
         '204': { description: Logged out; the refresh cookie is cleared }
+  /auth/providers:
+    get:
+      tags: [Auth]
+      summary: Sign-in methods available on this deployment
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { password: { type: boolean }, google: { type: boolean } } }
   /auth/google:
     get:
       tags: [Auth]
-      summary: Start Google OAuth 2.0 sign-in
-      description: Redirects to Google's consent screen with a CSRF state cookie. Returns 501 until GOOGLE_CLIENT_ID is configured.
+      summary: Start Google OAuth 2.0 sign-in (authorization code + PKCE)
+      description: |
+        Redirects to Google's consent screen. A random `state` (CSRF protection) and a
+        PKCE verifier are kept in a 10-minute HttpOnly cookie; only the S256 challenge is
+        sent to Google. Returns 501 until GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set.
       security:
         - oauth2: [openid, email, profile]
       responses:
@@ -307,14 +321,18 @@ paths:
     get:
       tags: [Auth]
       summary: Google OAuth 2.0 callback
+      description: |
+        Checks `state` against the cookie, exchanges the code with the PKCE verifier,
+        requires a verified Google email, then signs in, links or creates the user. The
+        refresh cookie is set and the browser is redirected to the app, so no token ever
+        appears in a URL. Failures redirect to the app with `?oauth=denied|state_mismatch|failed`.
       security:
         - oauth2: [openid, email, profile]
       parameters:
         - { name: code, in: query, schema: { type: string } }
         - { name: state, in: query, schema: { type: string } }
       responses:
-        '400': { $ref: '#/components/responses/Error' }
-        '501': { $ref: '#/components/responses/Error' }
+        '302': { description: Redirect back to the app, signed in or with an error reason }
   /me:
     get:
       tags: [Auth]
