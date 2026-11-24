@@ -28,12 +28,15 @@ function errorHandler(err, req, res, next) {
   }
 
   const status = err.status || 500;
-  if (status >= 500) logger.error({ err, requestId: req.id }, 'unhandled error');
+  // Deliberate AppErrors (e.g. 501 not configured) keep their message; only
+  // unexpected failures are masked so internals never leak to clients.
+  const expected = err instanceof AppError || status < 500;
+  if (!expected) logger.error({ err, requestId: req.id }, 'unhandled error');
 
   res.status(status).json({
     error: {
-      code: err.code || 'INTERNAL_ERROR',
-      message: status >= 500 ? 'Something went wrong' : err.message,
+      code: expected ? (err.code || 'REQUEST_ERROR') : 'INTERNAL_ERROR',
+      message: expected ? err.message : 'Something went wrong',
       details: err.details || {},
       requestId: req.id,
     },
