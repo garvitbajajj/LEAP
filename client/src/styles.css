@@ -266,6 +266,14 @@ fieldset.card { border: 2px solid var(--line); }
   padding-bottom: 12px;
   border-bottom: 1.5px solid var(--line-soft);
 }
+.welcome-title { font-size: 24px; margin: 0 0 6px; letter-spacing: -0.02em; }
+.welcome-tiles { display: grid; gap: 8px; }
+.welcome-tile {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 9px 11px; background: #ffffff; border: 1.5px solid var(--line);
+  box-shadow: 2px 2px 0 rgba(31, 35, 71, 0.14); font-size: 13px;
+}
+.welcome-tile span { color: var(--muted); font-size: 12.5px; }
 .demo-accounts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 
 /* ---------- onboarding ---------- */

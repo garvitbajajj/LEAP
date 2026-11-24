@@ -18,6 +18,7 @@ const OAUTH_ERRORS = {
 };
 
 const HEADINGS = {
+  welcome: 'Welcome to LEAP',
   login: 'Welcome back',
   register: 'Create your account',
   otp: 'Sign in with Email OTP',
@@ -27,7 +28,7 @@ const HEADINGS = {
 
 export default function Login() {
   const { login, loginWithOtp, register } = useAuth();
-  const [mode, setMode] = useState('login');
+  const [mode, setMode] = useState(() => (window.location.search.includes('oauth=') ? 'login' : 'welcome'));
   const [otpSent, setOtpSent] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', password: '', code: '' });
   const [error, setError] = useState(() => OAUTH_ERRORS[new URLSearchParams(window.location.search).get('oauth')] || null);
@@ -113,10 +114,39 @@ export default function Login() {
         <section className="auth-form">
           <div className="auth-brand-row">
             <Logo />
-            <span className="badge badge-primary">Adaptive Learning</span>
+            {mode === 'welcome'
+              ? <span className="badge badge-primary">v1.0</span>
+              : (
+                <button type="button" className="why-toggle small" onClick={() => switchMode('welcome')}>
+                  ← Welcome
+                </button>
+              )}
           </div>
 
-          {error && <Banner tone="error">{error}</Banner>}
+          {mode === 'welcome' ? (
+            <div className="stack">
+              <div>
+                <h1 className="welcome-title">Learn what matters next.</h1>
+                <p className="muted" style={{ marginBottom: 0 }}>
+                  AI-powered adaptive learning that recommends your next step and explains why.
+                </p>
+              </div>
+              <div className="welcome-tiles">
+                <div className="welcome-tile"><b>✦ Smart Feed</b><span>Hybrid AI recommendations</span></div>
+                <div className="welcome-tile"><b>✦ Adaptive Path</b><span>Prerequisite-aware steps</span></div>
+                <div className="welcome-tile"><b>✦ Secured API</b><span>JWT, OAuth 2.0, OTP &amp; Keys</span></div>
+              </div>
+              <div className="stack" style={{ gap: 8 }}>
+                <Button block onClick={() => switchMode('login')}>Sign in →</Button>
+                <Button variant="ghost" block onClick={() => switchMode('register')}>Create account</Button>
+              </div>
+              <p className="small muted" style={{ textAlign: 'center', margin: 0 }}>
+                <a href="/api/v1/docs" target="_blank" rel="noreferrer">Explore API Docs (Swagger)</a>
+              </p>
+            </div>
+          ) : (
+            <>
+              {error && <Banner tone="error">{error}</Banner>}
           {notice && <Banner tone="success">{notice}</Banner>}
           {mode === 'forgot' && !notice && (
             <p className="small muted">Enter your account email and we will send you a link to choose a new password.</p>
@@ -196,6 +226,8 @@ export default function Login() {
                 ))}
               </div>
             </div>
+          )}
+            </>
           )}
         </section>
       </div>

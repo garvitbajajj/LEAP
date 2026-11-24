@@ -41,7 +41,6 @@ pipeline {
     REGISTRY = 'docker.io/garvitbajajj'
     TAG = "${env.BUILD_NUMBER}"
     CONTENT_ENCODER = 'tfidf'
-    COMPOSE_PARALLEL_LIMIT = '1'
   }
 
   stages {
@@ -183,7 +182,9 @@ pipeline {
       steps {
         runCmd('docker compose -p leap down --remove-orphans')
         runCmd('docker compose -p leap build')
-        runCmd('docker compose -p leap up -d --wait')
+        runCmd('docker compose -p leap up -d --wait mongo redis')
+        runCmd('docker compose -p leap up -d --wait ml')
+        runCmd('docker compose -p leap up -d --wait server client')
         script {
           def rawOut = ''
           if (isUnix()) {
