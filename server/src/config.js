@@ -11,6 +11,13 @@ module.exports = {
   jwtExpiresIn: env('JWT_EXPIRES_IN', '15m'),
   refreshTtlDays: Number(env('REFRESH_TTL_DAYS', 7)),
   clientUrl: env('CLIENT_URL', 'http://localhost:5173'),
+  smtp: {
+    host: env('SMTP_HOST', ''),
+    port: Number(env('SMTP_PORT', 587)),
+    user: env('SMTP_USER', ''),
+    pass: env('SMTP_PASS', ''),
+    from: env('MAIL_FROM', 'LEAP <no-reply@leap.local>'),
+  },
   internalBearerToken: env('INTERNAL_BEARER_TOKEN', 'leap-internal-dev-token'),
   bootstrap: {
     enabled: env('BOOTSTRAP_ENABLED', 'true') === 'true',

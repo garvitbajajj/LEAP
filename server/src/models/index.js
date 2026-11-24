@@ -23,6 +23,8 @@ const UserSchema = new Schema({
   googleId: { type: String, unique: true, sparse: true },
   failedLogins: { type: Number, default: 0, select: false },
   lockedUntil: { type: Date, select: false },
+  resetTokenHash: { type: String, select: false, index: { sparse: true } },
+  resetTokenExpires: { type: Date, select: false },
 }, opts);
 
 UserSchema.methods.toPublic = function toPublic() {

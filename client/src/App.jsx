@@ -3,6 +3,7 @@ import { useAuth } from './auth';
 import Nav from './components/Nav';
 import { Spinner } from './components/ui';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import Consent from './pages/Consent';
 import Onboarding from './pages/Onboarding';
 import Feed from './pages/Feed';
@@ -17,7 +18,7 @@ export default function App() {
   const { user, profile, loading } = useAuth();
 
   if (loading) return <Spinner />;
-  if (!user) return <Login />;
+  if (!user) return window.location.pathname === '/reset-password' ? <ResetPassword /> : <Login />;
 
   const isLearner = user.role === 'learner';
 

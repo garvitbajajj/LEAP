@@ -286,6 +286,43 @@ paths:
       responses:
         '200': { description: New access token, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
         '401': { $ref: '#/components/responses/Error' }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Email a password reset link
+      description: |
+        Always answers 202 with the same message, whether or not the account exists, so it
+        cannot be used to discover accounts. The link carries a single-use token valid for
+        30 minutes; only its SHA-256 hash is stored. Without SMTP configured, the email is
+        written to the server log instead.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email], properties: { email: { type: string, example: learner@leap.dev } } }
+      responses:
+        '202': { description: Reset link sent if the account exists }
+        '400': { $ref: '#/components/responses/Error' }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Set a new password with a reset token
+      description: Clears any lockout and revokes every existing session for the account.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string, description: 8+ characters with a letter and a digit }
+      responses:
+        '200': { description: Password updated }
+        '400': { $ref: '#/components/responses/Error' }
   /auth/logout:
     post:
       tags: [Auth]
