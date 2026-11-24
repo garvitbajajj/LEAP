@@ -10,6 +10,7 @@ const { createSessions, mongoStore } = require('./sessions');
 const google = require('./google');
 const { createResetToken, resetTokenQuery } = require('./passwordReset');
 const { sendMail } = require('./mailer');
+const { feedCache } = require('../recommendations/cache');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -275,6 +276,7 @@ router.put('/me/profile', jwtAuth, ah(async (req, res) => {
     },
     { new: true, upsert: true, runValidators: true },
   );
+  await feedCache.invalidate(req.user.id); // a new goal changes what should be recommended
   res.json(profile);
 }));
 

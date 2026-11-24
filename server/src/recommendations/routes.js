@@ -12,6 +12,7 @@ const { jwtAuth, requireConsent } = require('../middleware/auth');
 const { recommendationFallbacks } = require('../middleware/metrics');
 const { GOALS } = require('../path/goals');
 const mlClient = require('./mlClient');
+const { feedCache } = require('./cache');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -52,6 +53,11 @@ function fallbackRank(candidates, goalSkills, limit) {
 router.get('/recommendations', jwtAuth, requireConsent, ah(async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 12, 50);
   const userId = req.user.id;
+
+  // A cached feed is returned as-is. ponytail: cache hits are not written to the
+  // Recommendation log, so analytics counts computed feeds rather than every page view.
+  const cached = await feedCache.get(userId, limit);
+  if (cached.status === 'hit') return res.json({ ...cached.value, cached: true });
 
   const profile = await LearnerProfile.findOne({ userId }).lean();
   if (!profile?.onboarded) {
@@ -130,7 +136,12 @@ router.get('/recommendations', jwtAuth, requireConsent, ah(async (req, res) => {
     })),
   });
 
-  res.json({ userId, generatedAt, strategy, modelVersion, degraded, items: out });
+  const body = {
+    userId, generatedAt, strategy, modelVersion, degraded, items: out,
+  };
+  // A fallback feed is never cached, so recommendations recover as soon as ML is back.
+  if (!degraded) await feedCache.set(userId, limit, cached.version, body);
+  res.json({ ...body, cached: false });
 }));
 
 // ---------------------------------------------------------------- feedback
@@ -148,6 +159,7 @@ router.post('/feedback', jwtAuth, ah(async (req, res) => {
   }
   if (!(await ContentItem.exists({ _id: itemId }))) throw new AppError(404, 'NOT_FOUND', 'Content item not found');
   const fb = await Feedback.create({ userId: req.user.id, itemId, verdict, rating, comment });
+  await feedCache.invalidate(req.user.id); // a rejected item must vanish from the next feed
   res.status(201).json(fb);
 }));
 
