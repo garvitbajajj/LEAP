@@ -1,4 +1,3 @@
-const crypto = require('crypto');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
@@ -8,6 +7,7 @@ const { User, LearnerProfile } = require('../models');
 const { AppError, ah } = require('../middleware/error');
 const { jwtAuth } = require('../middleware/auth');
 const { createSessions, mongoStore } = require('./sessions');
+const google = require('./google');
 
 const router = express.Router();
 
@@ -113,31 +113,74 @@ router.post('/auth/logout', ah(async (req, res) => {
 }));
 
 // ---------------------------------------------------------------- Google OAuth 2.0
-// The redirect leg is implemented. The callback's token exchange is deferred until
-// Google credentials are issued for the project; see docs/DEFERRED.md.
-router.get('/auth/google', (req, res, next) => {
-  if (!config.google.clientId) {
-    return next(new AppError(501, 'OAUTH_NOT_CONFIGURED',
-      'Google OAuth is declared but GOOGLE_CLIENT_ID is not set in this environment'));
-  }
-  const state = crypto.randomBytes(16).toString('hex');
-  res.cookie('oauth_state', state, { httpOnly: true, sameSite: 'lax', maxAge: 10 * 60 * 1000 });
-  const params = new URLSearchParams({
-    client_id: config.google.clientId,
-    redirect_uri: config.google.redirectUri,
-    response_type: 'code',
-    scope: 'openid email profile',
-    state,
-  });
-  return res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+// Authorization code + PKCE. The state and PKCE verifier live in a short-lived
+// HttpOnly cookie; SameSite=Lax so it survives the top-level redirect back from Google.
+const OAUTH_COOKIE = 'leap_oauth';
+const oauthCookieOptions = {
+  httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax', path: '/api/v1/auth/google',
+};
+
+/** Which sign-in methods this deployment offers, so the UI can hide unconfigured ones. */
+router.get('/auth/providers', (req, res) => {
+  res.json({ password: true, google: Boolean(config.google.clientId && config.google.clientSecret) });
 });
 
-router.get('/auth/google/callback', (req, res, next) => {
-  if (!req.query.state || req.query.state !== req.cookies.oauth_state) {
-    return next(new AppError(400, 'OAUTH_STATE_MISMATCH', 'OAuth state parameter did not match'));
+router.get('/auth/google', (req, res, next) => {
+  if (!config.google.clientId || !config.google.clientSecret) {
+    return next(new AppError(501, 'OAUTH_NOT_CONFIGURED',
+      'Google OAuth is declared but GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not set in this environment'));
   }
-  return next(new AppError(501, 'OAUTH_PENDING', 'Google token exchange is scheduled for the next milestone'));
+  const { state, verifier, challenge } = google.newFlow();
+  res.cookie(OAUTH_COOKIE, `${state}.${verifier}`, { ...oauthCookieOptions, maxAge: 10 * 60 * 1000 });
+  return res.redirect(google.authorizationUrl({
+    clientId: config.google.clientId, redirectUri: config.google.redirectUri, state, challenge,
+  }));
 });
+
+/** The callback is a browser navigation, so failures redirect back to the login page. */
+router.get('/auth/google/callback', ah(async (req, res) => {
+  const back = (reason) => res.redirect(`${config.clientUrl}/?oauth=${reason}`);
+  const [state, verifier] = String(req.cookies[OAUTH_COOKIE] || '').split('.');
+  res.clearCookie(OAUTH_COOKIE, oauthCookieOptions);
+
+  if (req.query.error) return back('denied');
+  if (!state || !verifier || req.query.state !== state) return back('state_mismatch');
+  if (!req.query.code) return back('failed');
+
+  let profile;
+  try {
+    const tokens = await google.exchangeCode({
+      code: String(req.query.code),
+      verifier,
+      clientId: config.google.clientId,
+      clientSecret: config.google.clientSecret,
+      redirectUri: config.google.redirectUri,
+    });
+    profile = await google.fetchProfile(tokens.access_token);
+  } catch (err) {
+    req.log.warn({ err: err.message }, 'google sign-in failed');
+    return back('failed');
+  }
+
+  // Match on Google id first, then link by verified email, otherwise create a learner.
+  let user = await User.findOne({ googleId: profile.googleId })
+    || await User.findOne({ email: profile.email });
+  if (user && !user.googleId) {
+    user.googleId = profile.googleId;
+    await user.save();
+  }
+  if (!user) {
+    user = await User.create({
+      name: profile.name, email: profile.email, authProvider: 'google', googleId: profile.googleId,
+    });
+    await LearnerProfile.create({ userId: user._id });
+  }
+
+  // Tokens never travel in the URL: the refresh cookie is set here and the app
+  // exchanges it for an access token as soon as it loads.
+  await startSession(res, user);
+  return res.redirect(`${config.clientUrl}/`);
+}));
 
 // ---------------------------------------------------------------- the current user
 router.get('/me', jwtAuth, ah(async (req, res) => {

@@ -20,6 +20,7 @@ const UserSchema = new Schema({
   passwordHash: { type: String, select: false },
   role: { type: String, enum: ['learner', 'instructor', 'admin'], default: 'learner' },
   authProvider: { type: String, enum: ['local', 'google'], default: 'local' },
+  googleId: { type: String, unique: true, sparse: true },
   failedLogins: { type: Number, default: 0, select: false },
   lockedUntil: { type: Date, select: false },
 }, opts);
