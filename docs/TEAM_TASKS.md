@@ -113,7 +113,7 @@ These are cheap marks, and they're lost if only one person shows up in the histo
 - [ ] Get the existing `Jenkinsfile` running green end to end, and screenshot each stage
 - [ ] **GitHub webhook → Jenkins** so every push triggers a build automatically
 - [ ] **`Jenkinsfile.multibranch`**: tests on every branch and PR, deploy only from `main`, a manual approval gate before production
-- [ ] ALS matrix-factorisation collaborative filtering, replacing item-item CF in `ml/app/model.py`
+- [x] ALS matrix-factorisation collaborative filtering, replacing item-item CF in `ml/app/model.py`
 - [ ] Redis caching of the feed, invalidated when the profile changes
 
 **Practicals you build first:** 10 Jenkins jobs · 11 Jenkins multibranch · 14 unit tests (Python half: the existing pytest suite)
