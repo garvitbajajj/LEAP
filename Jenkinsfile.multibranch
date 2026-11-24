@@ -162,6 +162,43 @@ pipeline {
       }
     }
 
+    // ─── 5. Build client bundle ───────────────────────────────────────────
+    stage('Build') {
+      steps {
+        dir('client') { sh 'npm run build' }
+      }
+      post {
+        success {
+          archiveArtifacts artifacts: 'client/dist/**', allowEmptyArchive: true
+        }
+      }
+    }
+
+    // ─── 6. SonarQube static analysis ────────────────────────────────────
+    // Runs on feature/* branches (warning only) and develop (quality gate blocks).
+    stage('SonarQube Analysis') {
+      when {
+        anyOf {
+          branch 'develop'
+          branch pattern: 'feature/.*', comparator: 'REGEXP'
+        }
+      }
+      steps {
+        withSonarQubeEnv('SonarQube') {
+          sh '''
+            npx sonar-scanner \
+              -Dsonar.projectKey=leap \
+              -Dsonar.projectName="LEAP" \
+              -Dsonar.sources=server/src,client/src,ml/app \
+              -Dsonar.tests=server/tests,ml/tests \
+              -Dsonar.javascript.lcov.reportPaths=server/coverage/lcov.info \
+              -Dsonar.python.coverage.reportPaths=ml/coverage.xml \
+              -Dsonar.host.url=${SONAR_URL}
+          '''
+        }
+      }
+    }
+
   }
 
   post {
