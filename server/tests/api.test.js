@@ -95,6 +95,12 @@ describe('authentication schemes', () => {
     expect(res.body.error.code).toBe('OAUTH_NOT_CONFIGURED');
   });
 
+  test('refresh without a cookie is rejected before touching the database', async () => {
+    const res = await request(app).post('/api/v1/auth/refresh');
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('MISSING_REFRESH_TOKEN');
+  });
+
   test('registration rejects a weak password before touching the database', async () => {
     const res = await request(app).post('/api/v1/auth/register')
       .send({ name: 'A', email: 'a@b.co', password: 'short' });
