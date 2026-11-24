@@ -11,10 +11,12 @@ const { AppError, ah } = require('../middleware/error');
 const { jwtAuth, requireConsent } = require('../middleware/auth');
 const { updateMastery } = require('../path/mastery');
 const { refreshStatuses } = require('../path/sequencer');
+const { feedCache } = require('../recommendations/cache');
 
 const router = express.Router();
 
 const TYPES = new Set(['view', 'click', 'complete', 'like', 'skip', 'bookmark', 'quiz_attempt']);
+const RANKING_EVENTS = new Set(['complete', 'like', 'skip', 'bookmark', 'quiz_attempt']);
 const OBJECT_ID = /^[a-f0-9]{24}$/;
 const MAX_BATCH = 500;
 const QUIZ_DAMPING_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -72,6 +74,9 @@ router.post('/events', jwtAuth, requireConsent, ah(async (req, res) => {
       sessionId: e.sessionId, timestamp: e.timestamp ? new Date(e.timestamp) : new Date(),
     })), { ordered: false });
     await applySideEffects(userId, candidates, skillsById);
+    // Views and clicks barely move the ranking and arrive constantly, so they leave
+    // the cached feed alone; anything stronger refreshes it.
+    if (candidates.some((e) => RANKING_EVENTS.has(e.type))) await feedCache.invalidate(userId);
   }
 
   res.status(202).json({ accepted: candidates.length, rejected });
@@ -102,6 +107,7 @@ router.post('/catalogue/items/:id/attempt', jwtAuth, requireConsent, ah(async (r
   if (passed) events.push({ eventId: crypto.randomUUID(), itemId: String(item._id), type: 'complete', progressPct: 100, timestamp: now });
   await Interaction.insertMany(events.map((e) => ({ ...e, userId: req.user.id })));
   await applySideEffects(req.user.id, events, new Map([[String(item._id), item.skills]]));
+  await feedCache.invalidate(req.user.id);
 
   const profile = await LearnerProfile.findOne({ userId: req.user.id }).select('mastery');
   res.json({

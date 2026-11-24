@@ -17,6 +17,13 @@ const recommendationFallbacks = new client.Counter({
   registers: [register],
 });
 
+const feedCacheResults = new client.Counter({
+  name: 'leap_recommendation_cache_total',
+  help: 'Feed cache lookups by result: hit, miss, bypass (Redis unavailable) or error',
+  labelNames: ['result'],
+  registers: [register],
+});
+
 function metricsMiddleware(req, res, next) {
   const end = httpDuration.startTimer({ method: req.method });
   res.on('finish', () => {
@@ -26,4 +33,6 @@ function metricsMiddleware(req, res, next) {
   next();
 }
 
-module.exports = { register, metricsMiddleware, recommendationFallbacks };
+module.exports = {
+  register, metricsMiddleware, recommendationFallbacks, feedCacheResults,
+};

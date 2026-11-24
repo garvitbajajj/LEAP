@@ -10,6 +10,7 @@
     "strategy": { "enum": ["hybrid", "cold_start", "fallback"] },
     "modelVersion": { "type": "string" },
     "degraded": { "type": "boolean" },
+    "cached": { "type": "boolean", "description": "true when served from the Redis feed cache (added with KAN-27)" },
     "items": {
       "type": "array",
       "items": {

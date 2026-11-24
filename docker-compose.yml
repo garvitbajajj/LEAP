@@ -27,11 +27,26 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       INTERNAL_BEARER_TOKEN: ${INTERNAL_BEARER_TOKEN:-leap-internal-dev-token}
       CORS_ORIGINS: http://localhost:8080
+      CLIENT_URL: http://localhost:8080
+      REDIS_URL: redis://redis:6379
     ports:
       - "4000:4000"
     depends_on:
       mongo:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Feed cache. Optional for the app: if it is down, recommendations are just computed.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   ml:
     build: ./ml

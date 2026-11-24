@@ -169,6 +169,7 @@ components:
         strategy: { type: string, enum: [hybrid, cold_start, fallback] }
         modelVersion: { type: string }
         degraded: { type: boolean, description: true when served by the popularity fallback }
+        cached: { type: boolean, description: true when served from the Redis feed cache }
         items:
           type: array
           items:
@@ -533,6 +534,10 @@ paths:
         Ranked by the ML service's hybrid model. If the ML service is down, slow or its
         circuit breaker is open, a popularity ranking is returned with `degraded: true`
         instead of an error.
+
+        Computed feeds are cached in Redis for 5 minutes (`cached: true` on a hit). The
+        cache is invalidated when the learner completes, likes, skips or bookmarks an item,
+        takes a quiz, gives feedback or edits their profile. Fallback feeds are never cached.
       parameters:
         - { name: limit, in: query, schema: { type: integer, default: 12, maximum: 50 } }
       responses:
