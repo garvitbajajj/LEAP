@@ -627,6 +627,15 @@ paths:
       responses:
         '200': { description: OK }
         '401': { $ref: '#/components/responses/Error' }
+  /internal/interactions:
+    get:
+      tags: [Internal]
+      summary: Implicit-feedback matrix for the ML collaborative filter (API key)
+      security:
+        - apiKeyAuth: []
+      responses:
+        '200': { description: OK }
+        '401': { $ref: '#/components/responses/Error' }
   /internal/catalogue:
     get:
       tags: [Internal]

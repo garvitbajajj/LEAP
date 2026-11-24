@@ -57,6 +57,28 @@ router.get('/internal/catalogue', apiKeyAuth, ah(async (req, res) => {
   res.json({ count: items.length, items });
 }));
 
+/**
+ * Implicit-feedback matrix for the ML service's collaborative filter: one row per
+ * learner-item pair with a summed engagement weight. Learner ids are opaque here.
+ */
+router.get('/internal/interactions', apiKeyAuth, ah(async (req, res) => {
+  const rows = await Interaction.aggregate([
+    { $group: {
+      _id: { u: '$userId', i: '$itemId' },
+      weight: { $sum: { $switch: { branches: [
+        { case: { $eq: ['$type', 'complete'] }, then: 3 },
+        { case: { $eq: ['$type', 'like'] }, then: 2 },
+        { case: { $eq: ['$type', 'skip'] }, then: -1 },
+      ], default: 1 } } },
+    } },
+    { $match: { weight: { $gt: 0 } } },
+  ]);
+  res.json({
+    count: rows.length,
+    rows: rows.map((r) => ({ userId: String(r._id.u), itemId: String(r._id.i), weight: r.weight })),
+  });
+}));
+
 // ---------------------------------------------------------------- API key management (jwtAuth + admin)
 router.post('/admin/api-keys', ...adminOnly, ah(async (req, res) => {
   const name = (req.body?.name || '').trim();
