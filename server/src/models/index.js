@@ -149,7 +149,10 @@ LearningPathSchema.index({ userId: 1, goalSkill: 1, status: 1 },
 const ApiKeySchema = new Schema({
   name: { type: String, required: true },
   keyHash: { type: String, required: true, unique: true }, // sha256, never the raw key
+  secretHash: { type: String, default: null }, // sha256 of x-api-secret, never the raw secret
   prefix: String,
+  secretPrefix: String,
+  scopes: { type: [String], default: ['catalogue:read', 'interactions:read'] },
   createdBy: { type: ObjectId, ref: 'User' },
   revokedAt: Date,
   lastUsedAt: Date,

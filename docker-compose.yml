@@ -74,6 +74,8 @@ services:
     ports:
       - "8088:80"
       - "8443:443"
+    volumes:
+      - client-certs:/etc/nginx/certs
     depends_on:
       - server
 
@@ -91,3 +93,4 @@ services:
 volumes:
   mongo-data:
   ml-registry:
+  client-certs:

@@ -13,7 +13,7 @@ info:
     | `basicAuth` | HTTP Basic | `POST /admin/bootstrap` - one-time creation of the first administrator |
     | `bearerAuth` | Opaque bearer token | `GET /internal/status` - infrastructure health |
     | `jwtAuth` | JWT bearer | every learner, instructor and admin endpoint |
-    | `apiKeyAuth` | `X-API-Key` header | `GET /internal/catalogue` - service-to-service |
+    | `apiKeyAuth` | `X-API-Key` + `X-API-Secret` | `GET /internal/catalogue`, `/internal/verify-key` - service-to-service |
     | `oauth2` | Google authorization code | `GET /auth/google` - social sign-in |
 
     **Try it:** call `POST /auth/login` with `learner@leap.dev` / `Learner@123`, copy the
@@ -64,7 +64,7 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-      description: Service key - the ML_API_KEY env value, or a key minted at POST /admin/api-keys.
+      description: Service key (sent with X-API-Secret for minted keys) - ML_API_KEY env value, or a key+secret pair minted at POST /admin/api-keys.
     oauth2:
       type: oauth2
       description: Google sign-in. Requires GOOGLE_CLIENT_ID to be configured.
@@ -832,9 +832,27 @@ paths:
   /internal/catalogue:
     get:
       tags: [Internal]
-      summary: Published catalogue export for services (API key)
+      summary: Published catalogue export for services (API key & secret)
       security:
         - apiKeyAuth: []
       responses:
         '200': { description: OK }
         '401': { $ref: '#/components/responses/Error' }
+  /internal/verify-key:
+    get:
+      tags: [Internal]
+      summary: Verify X-API-Key and X-API-Secret credentials
+      security:
+        - apiKeyAuth: []
+      responses:
+        '200': { description: OK }
+        '401': { $ref: '#/components/responses/Error' }
+  /admin/security-overview:
+    get:
+      tags: [Admin]
+      summary: Active API security schemes, hardening posture and recent audit logs
+      security:
+        - jwtAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { $ref: '#/components/responses/Error' }

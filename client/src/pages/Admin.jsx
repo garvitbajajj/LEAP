@@ -309,7 +309,161 @@ export function ManageContent() {
   );
 }
 
-// ---------------------------------------------------------------- users
+// ---------------------------------------------------------------- users & security
+function SecurityCenter() {
+  const [overview, setOverview] = useState(null);
+  const [keys, setKeys] = useState([]);
+  const [keyName, setKeyName] = useState('');
+  const [minted, setMinted] = useState(null);
+  const [verifyResult, setVerifyResult] = useState(null);
+  const [secError, setSecError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function loadSecurity() {
+    try {
+      const [ov, ks] = await Promise.all([api('/admin/security-overview'), api('/admin/api-keys')]);
+      setOverview(ov);
+      setKeys(ks);
+    } catch (e) {
+      setSecError(e.message);
+    }
+  }
+
+  useEffect(() => { loadSecurity(); }, []);
+
+  async function createKey(e) {
+    e.preventDefault();
+    if (!keyName.trim()) return;
+    setSecError(null);
+    setVerifyResult(null);
+    setBusy(true);
+    try {
+      const res = await api('/admin/api-keys', { method: 'POST', body: { name: keyName.trim() } });
+      setMinted(res);
+      setKeyName('');
+      await loadSecurity();
+    } catch (err) {
+      setSecError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revokeKey(id) {
+    setSecError(null);
+    try {
+      await api(`/admin/api-keys/${id}`, { method: 'DELETE' });
+      if (minted?.id === id) setMinted(null);
+      await loadSecurity();
+    } catch (err) {
+      setSecError(err.message);
+    }
+  }
+
+  async function testKeyPair() {
+    if (!minted) return;
+    setSecError(null);
+    setVerifyResult(null);
+    try {
+      const res = await fetch('/api/v1/internal/verify-key', {
+        headers: { 'x-api-key': minted.key, 'x-api-secret': minted.secret },
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error?.message || `HTTP ${res.status}`);
+      setVerifyResult(body);
+    } catch (err) {
+      setSecError(`Verification failed: ${err.message}`);
+    }
+  }
+
+  return (
+    <div className="stack" style={{ marginTop: 24 }}>
+      <div className="page-head">
+        <div>
+          <h2>API Security &amp; Key Management</h2>
+          <p>Active authentication schemes, machine-to-machine API Key &amp; Secret credentials, and recent security audit events.</p>
+        </div>
+      </div>
+
+      {secError && <Banner tone="error">{secError}</Banner>}
+
+      {overview && (
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
+          <Card>
+            <h3>Active Authentication Schemes</h3>
+            <table className="table">
+              <thead><tr><th>Scheme</th><th>Header / Flow</th><th>Status</th></tr></thead>
+              <tbody>
+                {overview.schemes.map((s) => (
+                  <tr key={s.id}>
+                    <td><b>{s.name}</b></td>
+                    <td className="small"><code>{s.header}</code></td>
+                    <td><Badge tone={s.status === 'active' ? 'success' : 'warn'}>{s.status}</Badge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+
+          <Card>
+            <h3>Mint API Key &amp; Secret</h3>
+            <p className="small muted">Issues a paired <code>x-api-key</code> and <code>x-api-secret</code> (both SHA-256 hashed in MongoDB).</p>
+            <form className="row" onSubmit={createKey} style={{ marginTop: 10 }}>
+              <input className="input" placeholder="e.g. Partner Analytics Portal" value={keyName} onChange={(e) => setKeyName(e.target.value)} required />
+              <Button type="submit" disabled={busy}>{busy ? 'Minting...' : 'Generate Key & Secret'}</Button>
+            </form>
+
+            {minted && (
+              <div style={{ marginTop: 12 }}>
+                <Banner tone="success">
+                  <div><b>Save these credentials now (shown once):</b></div>
+                  <div className="small" style={{ marginTop: 6 }}>
+                    <div><code>x-api-key:</code> <code>{minted.key}</code></div>
+                    <div><code>x-api-secret:</code> <code>{minted.secret}</code></div>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <Button type="button" size="sm" variant="ghost" onClick={testKeyPair}>Test Key &amp; Secret</Button>
+                  </div>
+                </Banner>
+              </div>
+            )}
+
+            {verifyResult && (
+              <div style={{ marginTop: 8 }}>
+                <Banner tone="info">
+                  Verified live via <code>GET /api/v1/internal/verify-key</code> for client <b>{verifyResult.client?.name}</b> ({verifyResult.scheme}).
+                </Banner>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      <Card>
+        <h3>Issued API Keys ({keys.length})</h3>
+        <table className="table">
+          <thead><tr><th>Name</th><th>Key Prefix</th><th>Secret Prefix</th><th>Last Used</th><th>Status</th><th /></tr></thead>
+          <tbody>
+            {keys.map((k) => (
+              <tr key={k._id}>
+                <td>{k.name}</td>
+                <td className="small"><code>{k.prefix}...</code></td>
+                <td className="small"><code>{k.secretPrefix ? `${k.secretPrefix}...` : 'legacy'}</code></td>
+                <td className="small">{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : 'Never'}</td>
+                <td><Badge tone={k.revokedAt ? 'danger' : 'success'}>{k.revokedAt ? 'revoked' : 'active'}</Badge></td>
+                <td>
+                  {!k.revokedAt && <Button size="sm" variant="danger" onClick={() => revokeKey(k._id)}>Revoke</Button>}
+                </td>
+              </tr>
+            ))}
+            {keys.length === 0 && <tr><td colSpan={6} className="muted">No API keys minted yet.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
 export function Users() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState(null);
@@ -327,7 +481,7 @@ export function Users() {
   if (!users) return <Spinner />;
   return (
     <>
-      <div className="page-head"><div><h1>Users</h1><p>Role changes are role-based access controlled and audit logged.</p></div></div>
+      <div className="page-head"><div><h1>Users &amp; Security</h1><p>Role-based access control, API Key &amp; Secret credentials, and security posture.</p></div></div>
       <Card>
         <table className="table">
           <thead><tr><th>Name</th><th>Email</th><th>Role</th></tr></thead>
@@ -347,6 +501,7 @@ export function Users() {
           </tbody>
         </table>
       </Card>
+      <SecurityCenter />
     </>
   );
 }

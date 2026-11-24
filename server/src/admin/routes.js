@@ -79,21 +79,71 @@ router.get('/internal/interactions', apiKeyAuth, ah(async (req, res) => {
   });
 }));
 
+/** Live verification endpoint for X-API-Key + X-API-Secret callers. */
+router.get('/internal/verify-key', apiKeyAuth, ah(async (req, res) => {
+  res.json({
+    authenticated: true,
+    scheme: 'apiKeyAuth (X-API-Key + X-API-Secret)',
+    client: req.apiClient || { name: 'service' },
+  });
+}));
+
 // ---------------------------------------------------------------- API key management (jwtAuth + admin)
 router.post('/admin/api-keys', ...adminOnly, ah(async (req, res) => {
   const name = (req.body?.name || '').trim();
   if (!name) throw new AppError(400, 'VALIDATION_FAILED', 'A key name is required');
-  const raw = `leap_${crypto.randomBytes(24).toString('hex')}`;
+  const rawKey = `leap_pk_${crypto.randomBytes(16).toString('hex')}`;
+  const rawSecret = `leap_sk_${crypto.randomBytes(24).toString('hex')}`;
+  const scopes = Array.isArray(req.body?.scopes) && req.body.scopes.length
+    ? req.body.scopes.map(String)
+    : ['catalogue:read', 'interactions:read'];
   const key = await ApiKey.create({
-    name, keyHash: sha256(raw), prefix: raw.slice(0, 9), createdBy: req.user.id,
+    name,
+    keyHash: sha256(rawKey),
+    secretHash: sha256(rawSecret),
+    prefix: rawKey.slice(0, 14),
+    secretPrefix: rawSecret.slice(0, 14),
+    scopes,
+    createdBy: req.user.id,
   });
-  await audit(req.user.id, 'apikey.create', 'ApiKey', key._id, null, { name });
-  // The raw key is returned exactly once and never stored.
-  res.status(201).json({ id: key._id, name, key: raw, prefix: key.prefix });
+  await audit(req.user.id, 'apikey.create', 'ApiKey', key._id, null, { name, scopes });
+  // The raw key and secret are returned exactly once and never stored.
+  res.status(201).json({
+    id: key._id,
+    name,
+    key: rawKey,
+    secret: rawSecret,
+    prefix: key.prefix,
+    secretPrefix: key.secretPrefix,
+    scopes,
+  });
 }));
 
 router.get('/admin/api-keys', ...adminOnly, ah(async (req, res) => {
-  res.json(await ApiKey.find().select('-keyHash').sort({ createdAt: -1 }));
+  res.json(await ApiKey.find().select('-keyHash -secretHash').sort({ createdAt: -1 }));
+}));
+
+router.get('/admin/security-overview', ...adminOnly, ah(async (req, res) => {
+  const [activeKeys, recentAudit] = await Promise.all([
+    ApiKey.countDocuments({ revokedAt: null }),
+    AuditLog.find().sort({ timestamp: -1 }).limit(15).lean(),
+  ]);
+  res.json({
+    schemes: [
+      { id: 'jwtAuth', name: 'JWT Bearer Token', header: 'Authorization: Bearer <jwt>', status: 'active' },
+      { id: 'oauth2', name: 'Google OAuth 2.0', header: 'Authorization Code + PKCE/State', status: config.google.clientId ? 'active' : 'unconfigured' },
+      { id: 'apiKeyAuth', name: 'API Key & Secret', header: 'X-API-Key + X-API-Secret', status: 'active' },
+      { id: 'bearerAuth', name: 'Static Bearer Token', header: 'Authorization: Bearer <token>', status: 'active' },
+      { id: 'basicAuth', name: 'HTTP Basic Auth', header: 'Authorization: Basic <base64>', status: config.bootstrap.enabled ? 'active' : 'disabled' },
+    ],
+    hardening: {
+      helmet: true,
+      corsOrigins: config.corsOrigins,
+      jwtExpiresIn: config.jwtExpiresIn,
+      activeApiKeys: activeKeys,
+    },
+    recentAudit,
+  });
 }));
 
 router.delete('/admin/api-keys/:id', ...adminOnly, ah(async (req, res) => {

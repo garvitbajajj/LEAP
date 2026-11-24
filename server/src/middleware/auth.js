@@ -3,7 +3,7 @@
  *   jwtAuth     JWT bearer token          - learner / instructor / admin routes
  *   bearerAuth  opaque bearer token       - internal status endpoint
  *   basicAuth   HTTP Basic                - one-time admin bootstrap
- *   apiKeyAuth  X-API-Key header          - service-to-service calls
+ *   apiKeyAuth  X-API-Key + X-API-Secret  - service-to-service calls
  *   oauth2      Google authorization code - see auth/routes.js
  */
 const crypto = require('crypto');
@@ -69,17 +69,25 @@ function basicAuth(req, res, next) {
   return next();
 }
 
-/** apiKeyAuth - X-API-Key checked against the env key or hashed keys in MongoDB. */
+/** apiKeyAuth - X-API-Key (+ X-API-Secret for minted keys) checked against env or MongoDB. */
 async function apiKeyAuth(req, res, next) {
   try {
     const key = req.headers['x-api-key'];
+    const secret = req.headers['x-api-secret'];
     if (!key) throw new AppError(401, 'UNAUTHENTICATED', 'Missing X-API-Key header');
-    if (safeEqual(key, config.ml.apiKey)) return next();
-    const found = await ApiKey.findOneAndUpdate(
-      { keyHash: sha256(key), revokedAt: null },
-      { lastUsedAt: new Date() },
-    );
+    if (safeEqual(key, config.ml.apiKey)) {
+      req.apiClient = { name: 'ml-service-env', scopes: ['catalogue:read', 'interactions:read'] };
+      return next();
+    }
+    const found = await ApiKey.findOne({ keyHash: sha256(key), revokedAt: null });
     if (!found) throw new AppError(401, 'UNAUTHENTICATED', 'Invalid or revoked API key');
+    if (found.secretHash) {
+      if (!secret || !safeEqual(sha256(secret), found.secretHash)) {
+        throw new AppError(401, 'UNAUTHENTICATED', 'Invalid or missing X-API-Secret header');
+      }
+    }
+    await ApiKey.updateOne({ _id: found._id }, { $set: { lastUsedAt: new Date() } });
+    req.apiClient = { id: found._id, name: found.name, scopes: found.scopes || [] };
     return next();
   } catch (err) {
     return next(err);
