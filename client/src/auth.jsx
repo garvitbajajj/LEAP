@@ -1,18 +1,27 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, setUnauthorisedHandler, tokenStore } from './api';
+import {
+  api, refreshSession, setUnauthorisedHandler, tokenStore,
+} from './api';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(Boolean(tokenStore.get()));
+  const [loading, setLoading] = useState(true);
 
-  const logout = useCallback(() => {
+  /** Forgets the session locally - used when the server has already rejected it. */
+  const clearSession = useCallback(() => {
     tokenStore.clear();
     setUser(null);
     setProfile(null);
   }, []);
+
+  /** User-initiated logout: revoke the refresh token on the server too. */
+  const logout = useCallback(async () => {
+    await api('/auth/logout', { method: 'POST' }).catch(() => {});
+    clearSession();
+  }, [clearSession]);
 
   const refresh = useCallback(async () => {
     const me = await api('/me');
@@ -21,11 +30,13 @@ export function AuthProvider({ children }) {
     return me;
   }, []);
 
+  // On load, resume from the stored access token, or silently from the refresh cookie
+  // (which is also how a Google sign-in lands back in the app).
   useEffect(() => {
-    setUnauthorisedHandler(logout);
-    if (!tokenStore.get()) return;
-    refresh().catch(logout).finally(() => setLoading(false));
-  }, [logout, refresh]);
+    setUnauthorisedHandler(clearSession);
+    const resume = tokenStore.get() ? refresh() : refreshSession().then(refresh);
+    resume.catch(clearSession).finally(() => setLoading(false));
+  }, [clearSession, refresh]);
 
   const start = useCallback(async (session) => {
     tokenStore.set(session.token);
