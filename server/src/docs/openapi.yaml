@@ -1,0 +1,638 @@
+openapi: 3.0.3
+info:
+  title: LEAP API
+  version: 1.0.0
+  description: |
+    **LEAP - Learning Engine for Adaptive Personalization.**
+    AI-powered e-learning personalised recommendation system.
+    Capstone II (CS 4191), Team 35, NIIT University.
+
+    ### Authentication - five schemes
+    | Scheme | Type | Protects |
+    |---|---|---|
+    | `basicAuth` | HTTP Basic | `POST /admin/bootstrap` - one-time creation of the first administrator |
+    | `bearerAuth` | Opaque bearer token | `GET /internal/status` - infrastructure health |
+    | `jwtAuth` | JWT bearer | every learner, instructor and admin endpoint |
+    | `apiKeyAuth` | `X-API-Key` header | `GET /internal/catalogue` - service-to-service |
+    | `oauth2` | Google authorization code | `GET /auth/google` - social sign-in |
+
+    **Try it:** call `POST /auth/login` with `learner@leap.dev` / `Learner@123`, copy the
+    `token`, click **Authorize** and paste it into `jwtAuth`.
+    Dev values for the other schemes are in `server/.env.example`.
+  contact:
+    name: Team 35 - Garvit Bajaj, Dhruvika Bansal, Abhishek Vijay Kakde, Taher M. H. Aurangabadi
+servers:
+  - url: http://localhost:4000/api/v1
+    description: Local development
+tags:
+  - name: Auth
+    description: Registration, login, Google OAuth and the current user
+  - name: Catalogue
+    description: Content items and the prerequisite graph (Vertical 2)
+  - name: Recommendations
+    description: The personalised feed and feedback (Vertical 3)
+  - name: Learning Path
+    description: Goals, adaptive paths and progress (Vertical 4)
+  - name: Events
+    description: Interaction event ingestion, contract C1 (Vertical 4)
+  - name: Analytics
+    description: Engagement and recommendation quality (Vertical 4)
+  - name: Admin
+    description: Bootstrap, users, API keys and audit log (Vertical 1)
+  - name: Internal
+    description: Machine-to-machine endpoints
+
+security:
+  - jwtAuth: []
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: Bootstrap credentials from BOOTSTRAP_USER / BOOTSTRAP_PASSWORD. Disabled by env after first use.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Static opaque token from INTERNAL_BEARER_TOKEN, for monitoring and infrastructure callers.
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Signed JWT returned by /auth/login or /auth/register. Carries the user id and role.
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Service key - the ML_API_KEY env value, or a key minted at POST /admin/api-keys.
+    oauth2:
+      type: oauth2
+      description: Google sign-in. Requires GOOGLE_CLIENT_ID to be configured.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://accounts.google.com/o/oauth2/v2/auth
+          tokenUrl: https://oauth2.googleapis.com/token
+          scopes:
+            openid: OpenID Connect sign-in
+            email: Read the email address
+            profile: Read the basic profile
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-f0-9]{24}$' }
+
+  responses:
+    Error:
+      description: Error envelope shared by every endpoint
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: VALIDATION_FAILED }
+            message: { type: string, example: A name and a valid email are required }
+            details: { type: object }
+            requestId: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, enum: [learner, instructor, admin] }
+    Session:
+      type: object
+      properties:
+        token: { type: string, description: JWT for the jwtAuth scheme }
+        user: { $ref: '#/components/schemas/User' }
+    LearnerProfile:
+      description: Contract C5
+      type: object
+      properties:
+        userId: { type: string }
+        goals: { type: array, items: { type: string }, example: [data-analyst] }
+        knownSkills:
+          type: array
+          items:
+            type: object
+            properties: { skill: { type: string }, level: { type: integer, minimum: 1, maximum: 3 } }
+        preferredFormat: { type: string, enum: [video, article, mixed] }
+        weeklyHours: { type: number }
+        difficultyLevel: { type: string, enum: [beginner, intermediate, advanced] }
+        mastery:
+          type: array
+          items:
+            type: object
+            properties: { skill: { type: string }, score: { type: number }, confidence: { type: number } }
+        consentGivenAt: { type: string, format: date-time, nullable: true }
+        onboarded: { type: boolean }
+    ContentItem:
+      description: Contract C4
+      type: object
+      properties:
+        _id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        type: { type: string, enum: [course, video, article, quiz] }
+        skills: { type: array, items: { type: string } }
+        prerequisites: { type: array, items: { type: string } }
+        difficulty: { type: integer, minimum: 1, maximum: 5 }
+        durationMins: { type: number }
+        status: { type: string, enum: [draft, published, retired] }
+        popularity: { type: number }
+    ContentItemInput:
+      type: object
+      required: [title, type, skills, difficulty]
+      properties:
+        title: { type: string, example: Intro to Pandas Pivot Tables }
+        description: { type: string }
+        type: { type: string, enum: [course, video, article, quiz] }
+        skills: { type: array, items: { type: string }, example: [data-wrangling] }
+        prerequisites: { type: array, items: { type: string } }
+        difficulty: { type: integer, minimum: 1, maximum: 5, example: 2 }
+        durationMins: { type: number, example: 20 }
+    RecommendationFeed:
+      description: Contract C2
+      type: object
+      properties:
+        userId: { type: string }
+        generatedAt: { type: string, format: date-time }
+        strategy: { type: string, enum: [hybrid, cold_start, fallback] }
+        modelVersion: { type: string }
+        degraded: { type: boolean, description: true when served by the popularity fallback }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              itemId: { type: string }
+              title: { type: string }
+              type: { type: string }
+              durationMins: { type: number }
+              difficulty: { type: integer }
+              skills: { type: array, items: { type: string } }
+              score: { type: number }
+              rank: { type: integer }
+              reason: { type: string, example: Builds on Writing Functions in Python, which you completed }
+              reasonFactors:
+                type: array
+                items:
+                  type: object
+                  properties: { factor: { type: string }, contribution: { type: number } }
+    EventBatch:
+      description: Contract C1
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [eventId, itemId, type]
+            properties:
+              eventId: { type: string, format: uuid }
+              itemId: { type: string }
+              type: { type: string, enum: [view, click, complete, like, skip, bookmark, quiz_attempt] }
+              dwellSeconds: { type: number }
+              progressPct: { type: number }
+              score: { type: number, minimum: 0, maximum: 1 }
+              sessionId: { type: string }
+              timestamp: { type: string, format: date-time }
+    LearningPath:
+      type: object
+      properties:
+        _id: { type: string }
+        goalSkill: { type: string }
+        goalLabel: { type: string }
+        status: { type: string, enum: [active, completed, abandoned] }
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              _id: { type: string }
+              itemId: { $ref: '#/components/schemas/ContentItem' }
+              status: { type: string, enum: [locked, available, in_progress, complete, skipped] }
+        summary:
+          type: object
+          properties:
+            totalSteps: { type: integer }
+            completedSteps: { type: integer }
+            progressPct: { type: integer }
+            remainingMins: { type: number }
+            etaWeeks: { type: number }
+
+paths:
+  # ---------------------------------------------------------------- Auth
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Create a learner account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, example: Asha Verma }
+                email: { type: string, example: asha@example.com }
+                password: { type: string, example: Secret123, description: 8+ characters with a letter and a digit }
+      responses:
+        '201': { description: Registered, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in and receive a JWT
+      description: Five consecutive failures lock the account for 15 minutes.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, example: learner@leap.dev }
+                password: { type: string, example: Learner@123 }
+      responses:
+        '200': { description: Logged in, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '423': { $ref: '#/components/responses/Error' }
+  /auth/google:
+    get:
+      tags: [Auth]
+      summary: Start Google OAuth 2.0 sign-in
+      description: Redirects to Google's consent screen with a CSRF state cookie. Returns 501 until GOOGLE_CLIENT_ID is configured.
+      security:
+        - oauth2: [openid, email, profile]
+      responses:
+        '302': { description: Redirect to Google }
+        '501': { $ref: '#/components/responses/Error' }
+  /auth/google/callback:
+    get:
+      tags: [Auth]
+      summary: Google OAuth 2.0 callback
+      security:
+        - oauth2: [openid, email, profile]
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+      responses:
+        '400': { $ref: '#/components/responses/Error' }
+        '501': { $ref: '#/components/responses/Error' }
+  /me:
+    get:
+      tags: [Auth]
+      summary: Current user and learner profile
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+                  profile: { $ref: '#/components/schemas/LearnerProfile' }
+        '401': { $ref: '#/components/responses/Error' }
+  /me/consent:
+    post:
+      tags: [Auth]
+      summary: Consent to behavioural data collection
+      description: Personalisation endpoints return 403 CONSENT_REQUIRED until this is called.
+      responses:
+        '200': { description: Consent recorded }
+  /me/profile:
+    put:
+      tags: [Auth]
+      summary: Save onboarding answers (contract C5)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [goals]
+              properties:
+                goals: { type: array, items: { type: string }, example: [data-analyst] }
+                knownSkills: { type: array, items: { type: object }, example: [{ skill: python-basics, level: 2 }] }
+                weeklyHours: { type: number, example: 6 }
+                preferredFormat: { type: string, enum: [video, article, mixed] }
+                difficultyLevel: { type: string, enum: [beginner, intermediate, advanced] }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/LearnerProfile' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+
+  # ---------------------------------------------------------------- Catalogue
+  /catalogue/items:
+    get:
+      tags: [Catalogue]
+      summary: Browse and search the catalogue
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: Full-text search }
+        - { name: skill, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string, enum: [course, video, article, quiz] } }
+        - { name: difficulty, in: query, schema: { type: integer, minimum: 1, maximum: 5 } }
+        - { name: status, in: query, schema: { type: string }, description: Instructors and admins only }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 24 } }
+      responses:
+        '200':
+          description: A page of items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ContentItem' } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pages: { type: integer }
+    post:
+      tags: [Catalogue]
+      summary: Create a draft content item (instructor or admin)
+      description: Rejected with 409 PREREQUISITE_CYCLE_DETECTED if the prerequisites would form a cycle.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ContentItemInput' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ContentItem' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /catalogue/items/{id}:
+    parameters: [{ $ref: '#/components/parameters/IdPath' }]
+    get:
+      tags: [Catalogue]
+      summary: Get one content item with its prerequisites
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ContentItem' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [Catalogue]
+      summary: Update a content item (instructor or admin)
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/ContentItemInput' } } }
+      responses:
+        '200': { description: Updated }
+        '409': { $ref: '#/components/responses/Error' }
+  /catalogue/items/{id}/publish:
+    parameters: [{ $ref: '#/components/parameters/IdPath' }]
+    post:
+      tags: [Catalogue]
+      summary: Publish a draft or retired item
+      responses:
+        '200': { description: Published }
+        '409': { $ref: '#/components/responses/Error' }
+  /catalogue/items/{id}/retire:
+    parameters: [{ $ref: '#/components/parameters/IdPath' }]
+    post:
+      tags: [Catalogue]
+      summary: Retire a published item
+      responses:
+        '200': { description: Retired }
+        '409': { $ref: '#/components/responses/Error' }
+  /catalogue/skills:
+    get:
+      tags: [Catalogue]
+      summary: Skill taxonomy
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { type: string } } } } }
+  /catalogue/graph:
+    get:
+      tags: [Catalogue]
+      summary: Prerequisite graph as nodes and edges
+      responses:
+        '200': { description: OK }
+
+  # ---------------------------------------------------------------- Recommendations
+  /recommendations:
+    get:
+      tags: [Recommendations]
+      summary: The personalised feed (contract C2)
+      description: |
+        Ranked by the ML service's hybrid model. If the ML service is down, slow or its
+        circuit breaker is open, a popularity ranking is returned with `degraded: true`
+        instead of an error.
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 12, maximum: 50 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RecommendationFeed' } } } }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /feedback:
+    post:
+      tags: [Recommendations]
+      summary: Rate or reject a recommendation
+      description: Items marked not_relevant are excluded from that learner's future feeds.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [itemId]
+              properties:
+                itemId: { type: string }
+                verdict: { type: string, enum: [relevant, not_relevant] }
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                comment: { type: string }
+      responses:
+        '201': { description: Recorded }
+        '400': { $ref: '#/components/responses/Error' }
+
+  # ---------------------------------------------------------------- Learning path
+  /goals:
+    get:
+      tags: [Learning Path]
+      summary: Available learning goals and the skills each needs
+      security: []
+      responses:
+        '200': { description: OK }
+  /paths:
+    post:
+      tags: [Learning Path]
+      summary: Generate an adaptive learning path for a goal
+      description: Topologically ordered over prerequisites; excludes completed items and mastered skills.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                goal: { type: string, example: data-analyst }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/LearningPath' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+  /paths/active:
+    get:
+      tags: [Learning Path]
+      summary: The learner's current path with progress and ETA
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LearningPath' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /paths/{id}/steps/{stepId}/complete:
+    post:
+      tags: [Learning Path]
+      summary: Mark a step complete
+      parameters:
+        - { $ref: '#/components/parameters/IdPath' }
+        - { name: stepId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Updated path }
+        '409': { $ref: '#/components/responses/Error' }
+  /paths/{id}/steps/{stepId}/skip:
+    post:
+      tags: [Learning Path]
+      summary: Skip a step with a reason
+      parameters:
+        - { $ref: '#/components/parameters/IdPath' }
+        - { name: stepId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reason], properties: { reason: { type: string } } }
+      responses:
+        '200': { description: Updated path }
+
+  # ---------------------------------------------------------------- Events
+  /events:
+    post:
+      tags: [Events]
+      summary: Ingest a batch of interaction events (contract C1)
+      description: |
+        Each event is validated independently; replays are idempotent via `eventId`.
+        Completions and quiz attempts update Bayesian Knowledge Tracing mastery and
+        advance the learner's active path.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/EventBatch' } } }
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted: { type: integer }
+                  rejected:
+                    type: array
+                    items: { type: object, properties: { eventId: { type: string }, reason: { type: string } } }
+        '400': { $ref: '#/components/responses/Error' }
+
+  # ---------------------------------------------------------------- Analytics
+  /analytics/overview:
+    get:
+      tags: [Analytics]
+      summary: Engagement, mastery and recommendation quality (instructor or admin)
+      responses:
+        '200': { description: OK }
+        '403': { $ref: '#/components/responses/Error' }
+
+  # ---------------------------------------------------------------- Admin
+  /admin/bootstrap:
+    post:
+      tags: [Admin]
+      summary: Create the first administrator (HTTP Basic)
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '201': { description: Administrator created, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List users
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/User' } } } } }
+        '403': { $ref: '#/components/responses/Error' }
+  /admin/users/{id}/role:
+    patch:
+      tags: [Admin]
+      summary: Change a user's role
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { role: { type: string, enum: [learner, instructor, admin] } } }
+      responses:
+        '200': { description: Updated }
+  /admin/api-keys:
+    get:
+      tags: [Admin]
+      summary: List API keys (hashes never returned)
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Admin]
+      summary: Mint an API key - the raw key is shown exactly once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { name: { type: string, example: ml-service } } }
+      responses:
+        '201': { description: Created }
+  /admin/api-keys/{id}:
+    delete:
+      tags: [Admin]
+      summary: Revoke an API key
+      parameters: [{ $ref: '#/components/parameters/IdPath' }]
+      responses:
+        '204': { description: Revoked }
+  /admin/audit:
+    get:
+      tags: [Admin]
+      summary: Most recent audit log entries
+      responses:
+        '200': { description: OK }
+
+  # ---------------------------------------------------------------- Internal
+  /internal/status:
+    get:
+      tags: [Internal]
+      summary: Infrastructure status (opaque bearer token)
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+        '401': { $ref: '#/components/responses/Error' }
+  /internal/catalogue:
+    get:
+      tags: [Internal]
+      summary: Published catalogue export for services (API key)
+      security:
+        - apiKeyAuth: []
+      responses:
+        '200': { description: OK }
+        '401': { $ref: '#/components/responses/Error' }
