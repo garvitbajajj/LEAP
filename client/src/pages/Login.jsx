@@ -99,32 +99,56 @@ export default function Login() {
 
   return (
     <div className="auth-wrap">
-      <section className="auth-hero">
-        <div>
-          <div className="brand" style={{ color: '#fff' }}>
-            <span className="brand-mark" style={{ background: 'rgba(255,255,255,0.2)' }} aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 32 32"><path d="M8 23 L16 9 L24 23" stroke="white" strokeWidth="3.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </span>
-            LEAP
+      <div className="y2k-browser">
+        <div className="y2k-titlebar">
+          <div className="y2k-title">
+            <span className="y2k-dot" aria-hidden="true" />
+            <span>LEAP_OS // Adaptive Learning Engine</span>
           </div>
-          <h1>Learn what matters next.</h1>
-          <p>LEAP is a Learning Engine for Adaptive Personalization. It learns what you know, recommends what you should learn next, and tells you why.</p>
-          <div className="auth-points">
-            <div><span>✦</span><span>Hybrid AI recommendations - collaborative, content-based and skill-gap signals</span></div>
-            <div><span>✦</span><span>An adaptive learning path that respects every prerequisite</span></div>
-            <div><span>✦</span><span>Mastery tracked with Bayesian Knowledge Tracing</span></div>
-            <div><span>✦</span><span>An explanation on every single recommendation</span></div>
+          <div className="y2k-controls" aria-hidden="true">
+            <span>_</span><span>□</span><span>×</span>
           </div>
         </div>
-        <p className="small" style={{ opacity: 0.75 }}>Capstone II · Team 35 · NIIT University</p>
-      </section>
+        <div className="y2k-menubar" aria-hidden="true">
+          <span>File</span><span>Edit</span><span>View</span><span>Security</span><span>Help</span>
+        </div>
+        <div className="y2k-addressbar" aria-hidden="true">
+          <span className="y2k-addr-label">Address</span>
+          <div className="y2k-addr-input">https://localhost:8443/leap</div>
+          <span className="y2k-addr-go">Go!</span>
+        </div>
 
-      <section className="auth-form">
-        <Card>
-          <div className="spread" style={{ marginBottom: 20 }}>
-            <div className="mobile-only"><Logo /></div>
-            <h2 style={{ margin: 0 }}>{HEADINGS[mode]}</h2>
-          </div>
+        <div className="y2k-desktop-body">
+          <section className="auth-hero">
+            <div className="y2k-subbar" aria-hidden="true">
+              <span>Folder: About LEAP</span>
+              <span className="y2k-subbar-btn">□</span>
+            </div>
+            <div className="auth-hero-inner">
+              <div className="brand">
+                <span className="brand-mark" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 32 32"><path d="M8 23 L16 9 L24 23" stroke="white" strokeWidth="3.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </span>
+                LEAP
+              </div>
+              <h1>Learn what matters next.</h1>
+              <p>LEAP is a Learning Engine for Adaptive Personalization. It learns what you know, recommends what you should learn next, and tells you why.</p>
+              <div className="auth-points">
+                <div><span>✦</span><span>Hybrid AI recommendations — collaborative, content-based and skill-gap signals</span></div>
+                <div><span>✦</span><span>An adaptive learning path that respects every prerequisite</span></div>
+                <div><span>✦</span><span>Mastery tracked with Bayesian Knowledge Tracing</span></div>
+                <div><span>✦</span><span>An explanation on every single recommendation</span></div>
+              </div>
+            </div>
+            <div className="auth-hero-foot">Capstone II · Team 35 · NIIT University</div>
+          </section>
+
+          <section className="auth-form">
+            <Card>
+              <div className="spread" style={{ marginBottom: 16 }}>
+                <div className="mobile-only"><Logo /></div>
+                <h2 style={{ margin: 0 }}>{HEADINGS[mode]}</h2>
+              </div>
 
           {error && <Banner tone="error">{error}</Banner>}
           {notice && <Banner tone="success">{notice}</Banner>}
@@ -207,8 +231,10 @@ export default function Login() {
               </div>
             </div>
           )}
-        </Card>
-      </section>
+            </Card>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }
