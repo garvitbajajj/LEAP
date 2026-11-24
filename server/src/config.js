@@ -6,6 +6,7 @@ module.exports = {
   port: Number(env('PORT', 4000)),
   nodeEnv: env('NODE_ENV', 'development'),
   mongoUri: env('MONGO_URI', 'mongodb://127.0.0.1:27017/leap'),
+  mongoReadPreference: env('MONGO_READ_PREFERENCE', 'primaryPreferred'),
   corsOrigins: env('CORS_ORIGINS', 'http://localhost:5173').split(',').map((s) => s.trim()),
   jwtSecret: env('JWT_SECRET', 'dev-only-insecure-secret'),
   jwtExpiresIn: env('JWT_EXPIRES_IN', '15m'),

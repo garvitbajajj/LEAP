@@ -39,11 +39,12 @@ router.post('/admin/bootstrap', basicAuth, ah(async (req, res) => {
 // ---------------------------------------------------------------- bearerAuth
 /** Infrastructure status for monitoring, guarded by a static opaque token. */
 router.get('/internal/status', bearerAuth, ah(async (req, res) => {
-  const [users, items, events] = await Promise.all([
+  const [users, items, events, topology] = await Promise.all([
     User.countDocuments(), ContentItem.countDocuments({ status: 'published' }), Interaction.countDocuments(),
+    db.getTopology(),
   ]);
   res.json({
-    status: 'ok', version: config.version, mongo: db.isUp() ? 'up' : 'down',
+    status: 'ok', version: config.version, mongo: db.isUp() ? 'up' : 'down', topology,
     counts: { users, publishedItems: items, interactions: events },
   });
 }));
