@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "leap/C1-events",
+  "title": "C1 - POST /api/v1/events request",
+  "type": "object",
+  "required": ["events"],
+  "properties": {
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "required": ["eventId", "itemId", "type", "timestamp"],
+        "properties": {
+          "eventId": { "type": "string", "format": "uuid" },
+          "userId": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+          "itemId": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+          "type": { "enum": ["view", "click", "complete", "like", "skip", "bookmark", "quiz_attempt"] },
+          "dwellSeconds": { "type": "number", "minimum": 0 },
+          "progressPct": { "type": "number", "minimum": 0, "maximum": 100 },
+          "score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "sessionId": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

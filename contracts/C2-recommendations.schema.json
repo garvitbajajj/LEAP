@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "leap/C2-recommendations",
+  "title": "C2 - GET /api/v1/recommendations response",
+  "type": "object",
+  "required": ["userId", "generatedAt", "strategy", "degraded", "items"],
+  "properties": {
+    "userId": { "type": "string" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "strategy": { "enum": ["hybrid", "cold_start", "fallback"] },
+    "modelVersion": { "type": "string" },
+    "degraded": { "type": "boolean" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["itemId", "title", "score", "rank", "reason"],
+        "properties": {
+          "itemId": { "type": "string" },
+          "title": { "type": "string" },
+          "type": { "enum": ["course", "video", "article", "quiz"] },
+          "durationMins": { "type": "number" },
+          "difficulty": { "type": "integer", "minimum": 1, "maximum": 5 },
+          "skills": { "type": "array", "items": { "type": "string" } },
+          "score": { "type": "number" },
+          "rank": { "type": "integer" },
+          "reason": { "type": "string" },
+          "reasonFactors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": { "factor": { "type": "string" }, "contribution": { "type": "number" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "leap/C3-ml-recommend",
+  "title": "C3 - POST /ml/v1/recommend request",
+  "description": "Extension agreed for the base build: candidateItems carries item metadata so the ML service stays stateless and never queries MongoDB.",
+  "type": "object",
+  "required": ["userId", "profile", "candidateItems"],
+  "properties": {
+    "userId": { "type": "string" },
+    "profile": { "$ref": "C5-learner-profile.schema.json" },
+    "candidateItemIds": { "type": "array", "items": { "type": "string" } },
+    "candidateItems": { "type": "array", "items": { "$ref": "C4-content-item.schema.json" } },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": { "itemId": { "type": "string" }, "weight": { "type": "number" } }
+      }
+    },
+    "completedItemIds": { "type": "array", "items": { "type": "string" } },
+    "context": { "type": "object" },
+    "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
+  }
+}

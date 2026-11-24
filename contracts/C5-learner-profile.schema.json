@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "leap/C5-learner-profile",
+  "title": "C5 - LearnerProfile",
+  "type": "object",
+  "required": ["userId", "goals"],
+  "properties": {
+    "userId": { "type": "string" },
+    "goals": { "type": "array", "items": { "type": "string" } },
+    "knownSkills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": { "skill": { "type": "string" }, "level": { "type": "integer", "minimum": 1, "maximum": 3 } }
+      }
+    },
+    "preferredFormat": { "enum": ["video", "article", "mixed"] },
+    "preferredLanguage": { "type": "string" },
+    "weeklyHours": { "type": "number", "minimum": 1, "maximum": 60 },
+    "difficultyLevel": { "enum": ["beginner", "intermediate", "advanced"] },
+    "mastery": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": { "skill": { "type": "string" }, "score": { "type": "number" }, "confidence": { "type": "number" } }
+      }
+    },
+    "interactionCount": { "type": "integer" },
+    "consentGivenAt": { "type": ["string", "null"], "format": "date-time" }
+  }
+}
