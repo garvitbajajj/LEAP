@@ -856,3 +856,26 @@ paths:
       responses:
         '200': { description: OK }
         '403': { $ref: '#/components/responses/Error' }
+  /admin/roles:
+    get:
+      tags: [Admin]
+      summary: List DB-backed RBAC roles and their granted permissions
+      security:
+        - jwtAuth: []
+      responses:
+        '200': { description: OK }
+        '403': { $ref: '#/components/responses/Error' }
+  /admin/roles/{role}/permissions:
+    put:
+      tags: [Admin]
+      summary: Update permissions for a role in MongoDB RolePermission
+      security:
+        - jwtAuth: []
+      parameters:
+        - in: path
+          name: role
+          required: true
+          schema: { type: string, enum: [learner, instructor, admin] }
+      responses:
+        '200': { description: OK }
+        '403': { $ref: '#/components/responses/Error' }

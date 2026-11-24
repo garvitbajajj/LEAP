@@ -5,11 +5,12 @@ const bcrypt = require('bcryptjs');
 const config = require('../config');
 const db = require('../db');
 const {
-  User, LearnerProfile, ContentItem, Interaction, ApiKey, AuditLog,
+  User, LearnerProfile, ContentItem, Interaction, ApiKey, RolePermission, AuditLog,
 } = require('../models');
 const { AppError, ah } = require('../middleware/error');
 const {
-  jwtAuth, bearerAuth, basicAuth, apiKeyAuth, requireRole, sha256, signJwt,
+  jwtAuth, bearerAuth, basicAuth, apiKeyAuth, requireRole, requirePermission,
+  ensureDefaultRolePermissions, ALL_PERMISSIONS, sha256, signJwt,
 } = require('../middleware/auth');
 const { audit } = require('./audit');
 
@@ -123,7 +124,7 @@ router.get('/admin/api-keys', ...adminOnly, ah(async (req, res) => {
   res.json(await ApiKey.find().select('-keyHash -secretHash').sort({ createdAt: -1 }));
 }));
 
-router.get('/admin/security-overview', ...adminOnly, ah(async (req, res) => {
+router.get('/admin/security-overview', jwtAuth, requirePermission('security:read'), ah(async (req, res) => {
   const [activeKeys, recentAudit] = await Promise.all([
     ApiKey.countDocuments({ revokedAt: null }),
     AuditLog.find().sort({ timestamp: -1 }).limit(15).lean(),
@@ -144,6 +145,34 @@ router.get('/admin/security-overview', ...adminOnly, ah(async (req, res) => {
     },
     recentAudit,
   });
+}));
+
+// ---------------------------------------------------------------- DB-backed RBAC (RolePermission)
+router.get('/admin/roles', jwtAuth, requirePermission('roles:read'), ah(async (req, res) => {
+  await ensureDefaultRolePermissions();
+  const roles = await RolePermission.find().sort({ role: 1 }).lean();
+  res.json({ roles, allPermissions: ALL_PERMISSIONS });
+}));
+
+router.put('/admin/roles/:role/permissions', jwtAuth, requirePermission('roles:write'), ah(async (req, res) => {
+  const { role } = req.params;
+  if (!['learner', 'instructor', 'admin'].includes(role)) {
+    throw new AppError(400, 'VALIDATION_FAILED', 'role must be learner, instructor or admin');
+  }
+  const { permissions } = req.body || {};
+  if (!Array.isArray(permissions)) {
+    throw new AppError(400, 'VALIDATION_FAILED', 'permissions must be an array of strings');
+  }
+  const clean = [...new Set(permissions.map((p) => String(p).trim()).filter(Boolean))];
+  const before = await RolePermission.findOne({ role }).lean();
+  const updated = await RolePermission.findOneAndUpdate(
+    { role },
+    { $set: { permissions: clean } },
+    { new: true, upsert: true },
+  );
+  await audit(req.user.id, 'role.permissions', 'RolePermission', updated._id,
+    { role, permissions: before?.permissions || [] }, { role, permissions: clean });
+  res.json(updated);
 }));
 
 router.delete('/admin/api-keys/:id', ...adminOnly, ah(async (req, res) => {

@@ -313,23 +313,52 @@ export function ManageContent() {
 function SecurityCenter() {
   const [overview, setOverview] = useState(null);
   const [keys, setKeys] = useState([]);
+  const [rolesData, setRolesData] = useState(null);
   const [keyName, setKeyName] = useState('');
   const [minted, setMinted] = useState(null);
   const [verifyResult, setVerifyResult] = useState(null);
+  const [roleNotice, setRoleNotice] = useState(null);
   const [secError, setSecError] = useState(null);
   const [busy, setBusy] = useState(false);
 
   async function loadSecurity() {
     try {
-      const [ov, ks] = await Promise.all([api('/admin/security-overview'), api('/admin/api-keys')]);
+      const [ov, ks, rl] = await Promise.all([
+        api('/admin/security-overview'),
+        api('/admin/api-keys'),
+        api('/admin/roles'),
+      ]);
       setOverview(ov);
       setKeys(ks);
+      setRolesData(rl);
     } catch (e) {
       setSecError(e.message);
     }
   }
 
   useEffect(() => { loadSecurity(); }, []);
+
+  async function togglePermission(roleDoc, perm) {
+    setSecError(null);
+    setRoleNotice(null);
+    const has = roleDoc.permissions.includes(perm);
+    const nextPerms = has
+      ? roleDoc.permissions.filter((p) => p !== perm)
+      : [...roleDoc.permissions, perm];
+    try {
+      const updated = await api(`/admin/roles/${roleDoc.role}/permissions`, {
+        method: 'PUT',
+        body: { permissions: nextPerms },
+      });
+      setRolesData((prev) => ({
+        ...prev,
+        roles: prev.roles.map((r) => (r.role === roleDoc.role ? updated : r)),
+      }));
+      setRoleNotice(`Updated ${roleDoc.role} permissions in MongoDB.`);
+    } catch (err) {
+      setSecError(err.message);
+    }
+  }
 
   async function createKey(e) {
     e.preventDefault();
@@ -460,6 +489,42 @@ function SecurityCenter() {
           </tbody>
         </table>
       </Card>
+
+      {rolesData && (
+        <Card>
+          <h3>DB-Backed RBAC Permissions (MongoDB <code>rolepermissions</code>)</h3>
+          <p className="small muted">Enforced by <code>requirePermission(...)</code> middleware and stored in MongoDB.</p>
+          {roleNotice && <Banner tone="success">{roleNotice}</Banner>}
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Permission</th>
+                  {rolesData.roles.map((r) => <th key={r.role}>{r.role}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {rolesData.allPermissions.map((perm) => (
+                  <tr key={perm}>
+                    <td><code>{perm}</code></td>
+                    {rolesData.roles.map((r) => (
+                      <td key={r.role}>
+                        <input
+                          type="checkbox"
+                          checked={r.permissions.includes(perm)}
+                          disabled={r.role === 'admin' && (perm === 'roles:read' || perm === 'roles:write')}
+                          aria-label={`${r.role} ${perm}`}
+                          onChange={() => togglePermission(r, perm)}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

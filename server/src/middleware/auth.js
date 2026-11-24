@@ -10,7 +10,18 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const config = require('../config');
 const { AppError } = require('./error');
-const { ApiKey, LearnerProfile } = require('../models');
+const { ApiKey, LearnerProfile, RolePermission } = require('../models');
+
+const DEFAULT_ROLE_PERMISSIONS = {
+  learner: ['catalogue:read', 'recommendations:read', 'paths:write', 'events:write', 'progress:read'],
+  instructor: ['catalogue:read', 'catalogue:write', 'analytics:read'],
+  admin: [
+    'catalogue:read', 'catalogue:write', 'analytics:read',
+    'users:read', 'users:write', 'roles:read', 'roles:write', 'apikeys:write', 'security:read',
+  ],
+};
+
+const ALL_PERMISSIONS = [...new Set(Object.values(DEFAULT_ROLE_PERMISSIONS).flat())];
 
 /** Constant-time string comparison that tolerates unequal lengths. */
 function safeEqual(a, b) {
@@ -101,6 +112,54 @@ const requireRole = (...roles) => (req, res, next) => (
     : next(new AppError(403, 'FORBIDDEN', `Requires role: ${roles.join(' or ')}`))
 );
 
+/** Seed default role -> permission documents in MongoDB if missing. */
+async function ensureDefaultRolePermissions() {
+  const descriptions = {
+    learner: 'Consume catalogue, recommendations, paths, and track progress',
+    instructor: 'Author/publish catalogue items and view cohort analytics',
+    admin: 'Full platform administration, RBAC, API keys, and security posture',
+  };
+  await Promise.all(
+    Object.entries(DEFAULT_ROLE_PERMISSIONS).map(([role, permissions]) => (
+      RolePermission.updateOne(
+        { role },
+        { $setOnInsert: { role, permissions, description: descriptions[role] || '' } },
+        { upsert: true },
+      )
+    )),
+  );
+}
+
+/** Resolve permissions for a role from MongoDB, falling back to defaults. */
+async function getPermissionsForRole(role) {
+  if (!role) return [];
+  if (RolePermission.db?.readyState !== 1 && !RolePermission.findOne?._isMockFunction) {
+    return DEFAULT_ROLE_PERMISSIONS[role] || [];
+  }
+  try {
+    const doc = await RolePermission.findOne({ role }).lean();
+    if (doc && Array.isArray(doc.permissions)) return doc.permissions;
+  } catch {
+    // Fall back to static defaults when DB is unavailable in unit tests
+  }
+  return DEFAULT_ROLE_PERMISSIONS[role] || [];
+}
+
+/** Granular DB-backed RBAC - must run after jwtAuth. */
+const requirePermission = (...requiredPerms) => async (req, res, next) => {
+  try {
+    const perms = await getPermissionsForRole(req.user?.role);
+    const allowed = perms.includes('*') || requiredPerms.every((p) => perms.includes(p));
+    if (!allowed) {
+      return next(new AppError(403, 'FORBIDDEN', `Missing permission: ${requiredPerms.join(', ')}`));
+    }
+    req.permissions = perms;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+};
+
 /** Personalization is blocked until the learner has consented to data collection. */
 async function requireConsent(req, res, next) {
   try {
@@ -116,6 +175,7 @@ async function requireConsent(req, res, next) {
 }
 
 module.exports = {
-  jwtAuth, bearerAuth, basicAuth, apiKeyAuth, requireRole, requireConsent,
+  jwtAuth, bearerAuth, basicAuth, apiKeyAuth, requireRole, requirePermission, requireConsent,
+  ensureDefaultRolePermissions, getPermissionsForRole, DEFAULT_ROLE_PERMISSIONS, ALL_PERMISSIONS,
   signJwt, sha256, safeEqual,
 };

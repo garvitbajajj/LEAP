@@ -182,6 +182,13 @@ const OtpTokenSchema = new Schema({
 OtpTokenSchema.index({ email: 1, purpose: 1, createdAt: -1 });
 OtpTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
+// ---------------------------------------------------------------- RolePermission (DB-backed RBAC)
+const RolePermissionSchema = new Schema({
+  role: { type: String, enum: ['learner', 'instructor', 'admin'], required: true, unique: true },
+  permissions: { type: [String], default: [] },
+  description: { type: String, default: '' },
+}, opts);
+
 // ---------------------------------------------------------------- AuditLog
 const AuditLogSchema = new Schema({
   actorId: { type: ObjectId, ref: 'User' },
@@ -204,5 +211,6 @@ module.exports = {
   ApiKey: model('ApiKey', ApiKeySchema),
   RefreshToken: model('RefreshToken', RefreshTokenSchema),
   OtpToken: model('OtpToken', OtpTokenSchema),
+  RolePermission: model('RolePermission', RolePermissionSchema),
   AuditLog: model('AuditLog', AuditLogSchema),
 };

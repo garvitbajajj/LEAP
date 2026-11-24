@@ -3,9 +3,11 @@ const logger = require('./logger');
 const db = require('./db');
 const { connectRedis, closeRedis } = require('./redis');
 const { createApp } = require('./app');
+const { ensureDefaultRolePermissions } = require('./middleware/auth');
 
 async function main() {
   await db.connect();
+  await ensureDefaultRolePermissions();
   connectRedis(); // optional and non-blocking: the feed cache is bypassed until it is ready
   const app = createApp();
   const server = app.listen(config.port, () =>

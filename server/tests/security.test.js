@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 
 const { createApp } = require('../src/app');
 const config = require('../src/config');
-const { ApiKey, AuditLog } = require('../src/models');
+const { ApiKey, AuditLog, RolePermission } = require('../src/models');
 const { sha256 } = require('../src/middleware/auth');
 
 const app = createApp();
@@ -74,6 +74,12 @@ describe('API Key & Secret + Security Overview', () => {
   });
 
   test('GET /admin/security-overview enforces admin RBAC and lists active schemes', async () => {
+    jest.spyOn(RolePermission, 'findOne').mockImplementation(({ role }) => ({
+      lean: async () => ({
+        role,
+        permissions: role === 'admin' ? ['security:read'] : ['catalogue:read'],
+      }),
+    }));
     const forbidden = await request(app)
       .get('/api/v1/admin/security-overview')
       .set('Authorization', `Bearer ${learnerToken}`);
@@ -92,5 +98,49 @@ describe('API Key & Secret + Security Overview', () => {
       expect.arrayContaining(['jwtAuth', 'oauth2', 'apiKeyAuth', 'bearerAuth', 'basicAuth']),
     );
     expect(ok.body.hardening.activeApiKeys).toBe(2);
+  });
+
+  test('GET /admin/roles and PUT /admin/roles/:role/permissions manage DB-backed RBAC', async () => {
+    jest.spyOn(RolePermission, 'updateOne').mockResolvedValue({ acknowledged: true });
+    jest.spyOn(RolePermission, 'findOne').mockImplementation(({ role }) => ({
+      lean: async () => ({
+        role,
+        permissions: role === 'admin' ? ['roles:read', 'roles:write', 'security:read'] : ['catalogue:read'],
+      }),
+    }));
+    jest.spyOn(RolePermission, 'find').mockReturnValue({
+      sort: () => ({
+        lean: async () => [
+          { role: 'admin', permissions: ['roles:read', 'roles:write'] },
+          { role: 'learner', permissions: ['catalogue:read'] },
+        ],
+      }),
+    });
+
+    const denied = await request(app)
+      .get('/api/v1/admin/roles')
+      .set('Authorization', `Bearer ${learnerToken}`);
+    expect(denied.status).toBe(403);
+
+    const list = await request(app)
+      .get('/api/v1/admin/roles')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(list.status).toBe(200);
+    expect(list.body.roles).toHaveLength(2);
+    expect(list.body.allPermissions).toContain('roles:write');
+
+    jest.spyOn(RolePermission, 'findOneAndUpdate').mockResolvedValue({
+      _id: 'rp-1',
+      role: 'instructor',
+      permissions: ['catalogue:read', 'catalogue:write'],
+    });
+    jest.spyOn(AuditLog, 'create').mockResolvedValue({});
+
+    const updated = await request(app)
+      .put('/api/v1/admin/roles/instructor/permissions')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ permissions: ['catalogue:read', 'catalogue:write'] });
+    expect(updated.status).toBe(200);
+    expect(updated.body.permissions).toEqual(['catalogue:read', 'catalogue:write']);
   });
 });
