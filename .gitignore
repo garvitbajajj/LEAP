@@ -29,3 +29,6 @@ npm-debug.log*
 
 # ML runtime artifacts
 ml/registry/
+
+# local tooling
+.claude/
