@@ -3,6 +3,8 @@ import { useAuth } from './auth';
 import Nav from './components/Nav';
 import { Spinner } from './components/ui';
 import Login from './pages/Login';
+import Consent from './pages/Consent';
+import Onboarding from './pages/Onboarding';
 
 /** Routes for each role. Learners are gated by consent, then onboarding. */
 export default function App() {
@@ -12,6 +14,9 @@ export default function App() {
   if (!user) return <Login />;
 
   const isLearner = user.role === 'learner';
+
+  if (isLearner && !profile?.consentGivenAt) return <><Nav /><main className="shell"><Consent /></main></>;
+  if (isLearner && !profile?.onboarded) return <><Nav /><main className="shell"><Onboarding /></main></>;
 
   return (
     <>
