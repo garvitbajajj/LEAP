@@ -1,6 +1,8 @@
 /**
- * Thin fetch wrapper. Attaches the JWT, parses the shared error envelope into an
- * ApiError, and signs the user out on an expired or invalid token.
+ * Thin fetch wrapper. Attaches the access JWT and parses the shared error envelope
+ * into an ApiError. When the access token has expired it silently exchanges the
+ * HttpOnly refresh cookie for a new one and retries the request once; concurrent
+ * requests that all hit an expired token share that single refresh.
  */
 const BASE = import.meta.env.VITE_API_URL || '/api/v1';
 const TOKEN_KEY = 'leap.token';
@@ -23,7 +25,7 @@ export const tokenStore = {
 let onUnauthorised = () => {};
 export const setUnauthorisedHandler = (fn) => { onUnauthorised = fn; };
 
-export async function api(path, { method = 'GET', body, keepalive } = {}) {
+async function request(path, { method = 'GET', body, keepalive } = {}, { retry = true } = {}) {
   const headers = { Accept: 'application/json' };
   const token = tokenStore.get();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -32,7 +34,8 @@ export async function api(path, { method = 'GET', body, keepalive } = {}) {
   let res;
   try {
     res = await fetch(`${BASE}${path}`, {
-      method, headers, keepalive, body: body === undefined ? undefined : JSON.stringify(body),
+      method, headers, keepalive, credentials: 'same-origin',
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
     throw new ApiError(0, 'NETWORK', 'Cannot reach the LEAP server. Is it running?');
@@ -40,10 +43,37 @@ export async function api(path, { method = 'GET', body, keepalive } = {}) {
 
   if (res.status === 204) return null;
   const data = await res.json().catch(() => null);
-  if (!res.ok) {
-    const e = data?.error || {};
-    if (res.status === 401 && ['INVALID_TOKEN', 'TOKEN_EXPIRED'].includes(e.code)) onUnauthorised();
-    throw new ApiError(res.status, e.code || 'HTTP_ERROR', e.message || `Request failed (${res.status})`, e.details);
+  if (res.ok) return data;
+
+  const e = data?.error || {};
+  const failure = new ApiError(res.status, e.code || 'HTTP_ERROR', e.message || `Request failed (${res.status})`, e.details);
+
+  if (res.status === 401 && retry && e.code === 'TOKEN_EXPIRED') {
+    try {
+      await refreshSession();
+    } catch {
+      onUnauthorised();
+      throw failure;
+    }
+    return request(path, { method, body, keepalive }, { retry: false });
   }
-  return data;
+  if (res.status === 401 && e.code === 'INVALID_TOKEN') onUnauthorised();
+  throw failure;
 }
+
+let inFlightRefresh = null;
+
+/** Trades the refresh cookie for a new access token. Concurrent callers share one call. */
+export function refreshSession() {
+  if (!inFlightRefresh) {
+    inFlightRefresh = request('/auth/refresh', { method: 'POST' }, { retry: false })
+      .then((session) => {
+        tokenStore.set(session.token);
+        return session;
+      })
+      .finally(() => { inFlightRefresh = null; });
+  }
+  return inFlightRefresh;
+}
+
+export const api = (path, options) => request(path, options);

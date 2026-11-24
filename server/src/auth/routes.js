@@ -6,9 +6,30 @@ const rateLimit = require('express-rate-limit');
 const config = require('../config');
 const { User, LearnerProfile } = require('../models');
 const { AppError, ah } = require('../middleware/error');
-const { jwtAuth, signJwt } = require('../middleware/auth');
+const { jwtAuth } = require('../middleware/auth');
+const { createSessions, mongoStore } = require('./sessions');
 
 const router = express.Router();
+
+const REFRESH_COOKIE = 'leap_rt';
+const refreshTtlMs = config.refreshTtlDays * 86_400_000;
+const sessions = createSessions(mongoStore(), { ttlMs: refreshTtlMs });
+
+// HttpOnly so page scripts can never read it; scoped to the auth routes so it is not
+// sent with every API call.
+const cookieOptions = {
+  httpOnly: true,
+  secure: config.nodeEnv === 'production',
+  sameSite: 'strict',
+  path: '/api/v1/auth',
+};
+
+/** Starts a session: refresh token in the cookie, access token in the response body. */
+async function startSession(res, user) {
+  const { accessToken, refreshToken } = await sessions.issue(user);
+  res.cookie(REFRESH_COOKIE, refreshToken, { ...cookieOptions, maxAge: refreshTtlMs });
+  return { token: accessToken, user: user.toPublic() };
+}
 
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
@@ -28,8 +49,6 @@ function validatePassword(password) {
   }
 }
 
-const session = (user) => ({ token: signJwt(user), user: user.toPublic() });
-
 // ---------------------------------------------------------------- local auth
 router.post('/auth/register', authLimiter, ah(async (req, res) => {
   const { name, email, password } = req.body || {};
@@ -42,7 +61,7 @@ router.post('/auth/register', authLimiter, ah(async (req, res) => {
   }
   const user = await User.create({ name, email, passwordHash: await bcrypt.hash(password, 10) });
   await LearnerProfile.create({ userId: user._id });
-  res.status(201).json(session(user));
+  res.status(201).json(await startSession(res, user));
 }));
 
 router.post('/auth/login', authLimiter, ah(async (req, res) => {
@@ -69,7 +88,28 @@ router.post('/auth/login', authLimiter, ah(async (req, res) => {
   user.failedLogins = 0;
   user.lockedUntil = undefined;
   await user.save();
-  res.json(session(user));
+  res.json(await startSession(res, user));
+}));
+
+// ---------------------------------------------------------------- refresh and logout
+router.post('/auth/refresh', authLimiter, ah(async (req, res) => {
+  try {
+    const { accessToken, refreshToken, user } = await sessions.rotate(
+      req.cookies[REFRESH_COOKIE],
+      (id) => User.findById(id),
+    );
+    res.cookie(REFRESH_COOKIE, refreshToken, { ...cookieOptions, maxAge: refreshTtlMs });
+    res.json({ token: accessToken, user: user.toPublic() });
+  } catch (err) {
+    res.clearCookie(REFRESH_COOKIE, cookieOptions);
+    throw err;
+  }
+}));
+
+router.post('/auth/logout', ah(async (req, res) => {
+  await sessions.revoke(req.cookies[REFRESH_COOKIE]);
+  res.clearCookie(REFRESH_COOKIE, cookieOptions);
+  res.status(204).end();
 }));
 
 // ---------------------------------------------------------------- Google OAuth 2.0
