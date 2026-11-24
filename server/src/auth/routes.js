@@ -8,6 +8,9 @@ const { AppError, ah } = require('../middleware/error');
 const { jwtAuth } = require('../middleware/auth');
 const { createSessions, mongoStore } = require('./sessions');
 const google = require('./google');
+const { createResetToken, resetTokenQuery } = require('./passwordReset');
+const { sendMail } = require('./mailer');
+const logger = require('../logger');
 
 const router = express.Router();
 
@@ -104,6 +107,48 @@ router.post('/auth/refresh', authLimiter, ah(async (req, res) => {
     res.clearCookie(REFRESH_COOKIE, cookieOptions);
     throw err;
   }
+}));
+
+// ---------------------------------------------------------------- password reset
+const GENERIC_RESET_REPLY = { message: 'If an account exists for that email, a reset link has been sent.' };
+
+router.post('/auth/forgot-password', authLimiter, ah(async (req, res) => {
+  const email = String(req.body?.email || '').toLowerCase().trim();
+  if (!EMAIL_RE.test(email)) throw new AppError(400, 'VALIDATION_FAILED', 'A valid email is required');
+
+  const user = await User.findOne({ email });
+  if (user) {
+    const { raw, hash, expiresAt } = createResetToken();
+    await User.updateOne({ _id: user._id }, { resetTokenHash: hash, resetTokenExpires: expiresAt });
+    const link = `${config.clientUrl}/reset-password?token=${raw}`;
+    // Not awaited: a slow mail server must not make "account exists" measurably slower.
+    sendMail({
+      to: user.email,
+      subject: 'Reset your LEAP password',
+      text: `Hi ${user.name},\n\nUse this link within 30 minutes to choose a new password:\n${link}\n\n`
+        + 'If you did not ask for this, you can ignore this email - your password has not changed.',
+    }).catch((err) => logger.error({ err: err.message }, 'password reset email failed'));
+  }
+  // Identical reply either way, so this endpoint cannot be used to discover accounts.
+  res.status(202).json(GENERIC_RESET_REPLY);
+}));
+
+router.post('/auth/reset-password', authLimiter, ah(async (req, res) => {
+  const { token, password } = req.body || {};
+  if (!token) throw new AppError(400, 'VALIDATION_FAILED', 'A reset token is required');
+  validatePassword(password);
+
+  const user = await User.findOne(resetTokenQuery(token)).select('+resetTokenHash');
+  if (!user) throw new AppError(400, 'INVALID_RESET_TOKEN', 'This reset link is invalid or has expired');
+
+  await User.updateOne({ _id: user._id }, {
+    passwordHash: await bcrypt.hash(password, 10),
+    failedLogins: 0,
+    $unset: { resetTokenHash: 1, resetTokenExpires: 1, lockedUntil: 1 },
+  });
+  // A reset usually means the old password may be known to someone else, so end every session.
+  await sessions.revokeAllForUser(user._id);
+  res.json({ message: 'Password updated. Please log in with your new password.' });
 }));
 
 router.post('/auth/logout', ah(async (req, res) => {
