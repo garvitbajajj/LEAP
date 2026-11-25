@@ -2,11 +2,15 @@ import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { Button } from './ui';
 
-const LINKS = {
-  learner: [['/', 'For you'], ['/path', 'My path'], ['/catalogue', 'Catalogue'], ['/progress', 'Progress']],
-  instructor: [['/admin', 'Analytics'], ['/admin/catalogue', 'Manage content'], ['/catalogue', 'Catalogue']],
-  admin: [['/admin', 'Analytics'], ['/admin/catalogue', 'Manage content'], ['/admin/users', 'Users'], ['/catalogue', 'Catalogue']],
-};
+const NAV_ITEMS = [
+  { to: '/', label: 'For you', perm: 'recommendations:read' },
+  { to: '/path', label: 'My path', perm: 'paths:write' },
+  { to: '/admin', label: 'Analytics', perm: 'analytics:read' },
+  { to: '/admin/catalogue', label: 'Manage content', perm: 'catalogue:write' },
+  { to: '/admin/users', label: 'Users', perm: 'users:read' },
+  { to: '/catalogue', label: 'Catalogue', perm: 'catalogue:read' },
+  { to: '/progress', label: 'Progress', perm: 'progress:read' },
+];
 
 export function Logo() {
   return (
@@ -20,14 +24,15 @@ export function Logo() {
 }
 
 export default function Nav() {
-  const { user, logout } = useAuth();
+  const { user, can, logout } = useAuth();
   const initials = user?.name?.split(' ').map((p) => p[0]).slice(0, 2).join('') || '?';
+  const links = NAV_ITEMS.filter((item) => can(item.perm));
   return (
     <header className="nav">
       <div className="nav-inner">
         <Logo />
         <nav className="nav-links" aria-label="Main">
-          {(LINKS[user?.role] || []).map(([to, label]) => (
+          {links.map(({ to, label }) => (
             <NavLink key={to} to={to} end={to === '/' || to === '/admin'}>{label}</NavLink>
           ))}
           <a href="/api/v1/docs" target="_blank" rel="noreferrer">API docs</a>

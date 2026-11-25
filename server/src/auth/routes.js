@@ -6,7 +6,7 @@ const config = require('../config');
 const db = require('../db');
 const { User, LearnerProfile } = require('../models');
 const { AppError, ah } = require('../middleware/error');
-const { jwtAuth } = require('../middleware/auth');
+const { jwtAuth, getPermissionsForRole } = require('../middleware/auth');
 const { createSessions, mongoStore } = require('./sessions');
 const google = require('./google');
 const { createResetToken, resetTokenQuery } = require('./passwordReset');
@@ -329,7 +329,8 @@ router.get('/me', jwtAuth, ah(async (req, res) => {
     LearnerProfile.findOne({ userId: req.user.id }),
   ]);
   if (!user) throw new AppError(404, 'NOT_FOUND', 'User no longer exists');
-  res.json({ user: user.toPublic(), profile });
+  const permissions = await getPermissionsForRole(user.role);
+  res.json({ user: user.toPublic(), profile, permissions });
 }));
 
 router.post('/me/consent', jwtAuth, ah(async (req, res) => {
