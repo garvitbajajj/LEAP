@@ -5,7 +5,7 @@ const logger = require('./logger');
 async function connect(uri = config.mongoUri) {
   mongoose.set('strictQuery', true);
   await mongoose.connect(uri, {
-    serverSelectionTimeoutMS: 5000,
+    serverSelectionTimeoutMS: 20000,
     readPreference: config.mongoReadPreference,
   });
   logger.info({ uri: uri.replace(/\/\/.*@/, '//***@'), readPreference: config.mongoReadPreference }, 'mongo connected');

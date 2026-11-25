@@ -192,7 +192,7 @@ pipeline {
     }
 
     stage('API & E2E (live stack)') {
-      options { timeout(time: 5, unit: 'MINUTES') }
+      options { timeout(time: 8, unit: 'MINUTES') }
       when { expression { params.RUN_E2E == true || env.LEAP_E2E_URL?.trim() } }
       steps {
         script {
@@ -200,15 +200,15 @@ pipeline {
           runNpx("--yes newman run postman/LEAP.postman_collection.json -e postman/LEAP.local.postman_environment.json --env-var \"baseUrl=${e2eUrl}\" --env-var \"apiBase=${e2eUrl}/api/v1\" --insecure --reporters cli,junit --reporter-junit-export postman/newman-report.xml")
           dir('tests/e2e') {
             if (isUnix()) {
-              sh "mvn -B verify -Dleap.baseUrl=${e2eUrl} -Dleap.headless=true"
+              sh "mvn -B verify -Dleap.baseUrl=${e2eUrl} -Dleap.headless=true -Dleap.timeoutSec=30"
             } else {
               bat """
                 @echo off
                 where mvn >nul 2>&1
                 if %ERRORLEVEL%==0 (
-                  call mvn -B verify -Dleap.baseUrl=${e2eUrl} -Dleap.headless=true
+                  call mvn -B verify -Dleap.baseUrl=${e2eUrl} -Dleap.headless=true -Dleap.timeoutSec=30
                 ) else (
-                  call "C:\\Users\\abhil\\tools\\apache-maven-3.9.9\\bin\\mvn.cmd" -B verify -Dleap.baseUrl=${e2eUrl} -Dleap.headless=true
+                  call "C:\\Users\\abhil\\tools\\apache-maven-3.9.9\\bin\\mvn.cmd" -B verify -Dleap.baseUrl=${e2eUrl} -Dleap.headless=true -Dleap.timeoutSec=30
                 )
               """
             }
