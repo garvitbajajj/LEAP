@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongo-rs-init
+  namespace: leap
+  labels:
+    app.kubernetes.io/name: mongo-rs-init
+    app.kubernetes.io/part-of: leap
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongo-rs-init
+        app.kubernetes.io/part-of: leap
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mongo-rs-init
+          image: mongo:7
+          command:
+            - mongosh
+            - --host
+            - mongo-0.mongo.leap.svc.cluster.local:27017
+            - --eval
+            - |
+              const hosts = [
+                'mongo-0.mongo.leap.svc.cluster.local:27017',
+                'mongo-1.mongo.leap.svc.cluster.local:27017',
+                'mongo-2.mongo.leap.svc.cluster.local:27017'
+              ];
+              try {
+                if (rs.status().ok === 1) {
+                  print('Replica set rs0 already initialized.');
+                  quit(0);
+                }
+              } catch (_) {}
+              rs.initiate({
+                _id: 'rs0',
+                members: [
+                  { _id: 0, host: hosts[0], priority: 2 },
+                  { _id: 1, host: hosts[1], priority: 1 },
+                  { _id: 2, host: hosts[2], priority: 1 }
+                ]
+              });

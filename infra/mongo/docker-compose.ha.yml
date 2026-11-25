@@ -1,0 +1,116 @@
+# 3-Node MongoDB Replica Set (rs0) overlay for LEAP
+# Usage:
+#   docker compose -f infra/mongo/docker-compose.ha.yml up -d --build
+#   docker compose -f infra/mongo/docker-compose.ha.yml --profile seed run --rm seed
+
+services:
+  mongo-1:
+    image: mongo:7
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-1-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mongo-2:
+    image: mongo:7
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    restart: unless-stopped
+    volumes:
+      - mongo-2-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mongo-3:
+    image: mongo:7
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    restart: unless-stopped
+    volumes:
+      - mongo-3-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mongo-rs-init:
+    image: mongo:7
+    depends_on:
+      mongo-1:
+        condition: service_healthy
+      mongo-2:
+        condition: service_healthy
+      mongo-3:
+        condition: service_healthy
+    volumes:
+      - ./init-replset.js:/scripts/init-replset.js:ro
+    entrypoint: ["mongosh", "--host", "mongo-1:27017", "/scripts/init-replset.js"]
+    restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  server:
+    build: ../../server
+    restart: unless-stopped
+    environment:
+      MONGO_URI: mongodb://mongo-1:27017,mongo-2:27017,mongo-3:27017/leap?replicaSet=rs0
+      MONGO_READ_PREFERENCE: secondaryPreferred
+      ML_URL: http://ml:8000
+      ML_API_KEY: ${ML_API_KEY:-leap-dev-ml-key}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      INTERNAL_BEARER_TOKEN: ${INTERNAL_BEARER_TOKEN:-leap-internal-dev-token}
+      CORS_ORIGINS: http://localhost:8080,https://localhost:8443
+      CLIENT_URL: https://localhost:8443
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "4000:4000"
+    depends_on:
+      mongo-rs-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  ml:
+    build: ../../ml
+    restart: unless-stopped
+    environment:
+      ML_API_KEY: ${ML_API_KEY:-leap-dev-ml-key}
+      LEAP_API_URL: http://server:4000/api/v1
+      LEAP_API_KEY: ${ML_API_KEY:-leap-dev-ml-key}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ml-registry:/app/registry
+
+  seed:
+    build: ../../server
+    profiles: ["seed"]
+    command: ["node", "src/seed/seed.js"]
+    environment:
+      MONGO_URI: mongodb://mongo-1:27017,mongo-2:27017,mongo-3:27017/leap?replicaSet=rs0
+    depends_on:
+      mongo-rs-init:
+        condition: service_completed_successfully
+
+volumes:
+  mongo-1-data:
+  mongo-2-data:
+  mongo-3-data:
+  ml-registry:

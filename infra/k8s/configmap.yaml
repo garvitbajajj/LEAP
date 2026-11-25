@@ -6,7 +6,8 @@ metadata:
   labels:
     app.kubernetes.io/part-of: leap
 data:
-  MONGO_URI: "mongodb://mongo:27017/leap"
+  MONGO_URI: "mongodb://mongo-0.mongo:27017,mongo-1.mongo:27017,mongo-2.mongo:27017/leap?replicaSet=rs0"
+  MONGO_READ_PREFERENCE: "secondaryPreferred"
   ML_URL: "http://ml:8000"
   LEAP_API_URL: "http://server:4000/api/v1"
   CORS_ORIGINS: "https://leap.example.com"

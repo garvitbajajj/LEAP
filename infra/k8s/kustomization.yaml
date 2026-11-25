@@ -8,6 +8,7 @@ resources:
   - configmap.yaml
   - secrets.yaml
   - mongo-statefulset.yaml
+  - mongo-rs-init-job.yaml
   - server-deployment.yaml
   - ml-deployment.yaml
   - client-deployment.yaml

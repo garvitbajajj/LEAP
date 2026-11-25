@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 
 const config = require('../config');
+const db = require('../db');
 const { User, LearnerProfile } = require('../models');
 const { AppError, ah } = require('../middleware/error');
 const { jwtAuth } = require('../middleware/auth');
@@ -65,8 +66,13 @@ router.post('/auth/register', authLimiter, ah(async (req, res) => {
   if (await User.exists({ email: email.toLowerCase() })) {
     throw new AppError(409, 'EMAIL_TAKEN', 'An account with this email already exists');
   }
-  const user = await User.create({ name, email, passwordHash: await bcrypt.hash(password, 10) });
-  await LearnerProfile.create({ userId: user._id });
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = await db.withTransaction(async (session) => {
+    const opts = session ? { session } : {};
+    const [created] = await User.create([{ name, email, passwordHash }], opts);
+    await LearnerProfile.create([{ userId: created._id }], opts);
+    return created;
+  });
   res.status(201).json(await startSession(res, user));
 }));
 
@@ -300,10 +306,14 @@ router.get('/auth/google/callback', ah(async (req, res) => {
     await user.save();
   }
   if (!user) {
-    user = await User.create({
-      name: profile.name, email: profile.email, authProvider: 'google', googleId: profile.googleId,
+    user = await db.withTransaction(async (session) => {
+      const opts = session ? { session } : {};
+      const [created] = await User.create([{
+        name: profile.name, email: profile.email, authProvider: 'google', googleId: profile.googleId,
+      }], opts);
+      await LearnerProfile.create([{ userId: created._id }], opts);
+      return created;
     });
-    await LearnerProfile.create({ userId: user._id });
   }
 
   // Tokens never travel in the URL: the refresh cookie is set here and the app
