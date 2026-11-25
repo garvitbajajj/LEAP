@@ -18,12 +18,20 @@ public final class DriverFactory {
     options.addArguments(
         "--no-sandbox",
         "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-software-rasterizer",
+        "--disable-features=VizDisplayCompositor",
+        "--disable-extensions",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-search-engine-choice-screen",
         "--window-size=1440,900",
         "--ignore-certificate-errors"
     );
     WebDriver driver = new ChromeDriver(options);
     driver.manage().timeouts().implicitlyWait(Duration.ZERO);
     driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(30));
+    driver.manage().timeouts().scriptTimeout(Duration.ofSeconds(30));
     return driver;
   }
 }

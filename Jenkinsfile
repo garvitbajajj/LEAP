@@ -192,6 +192,7 @@ pipeline {
     }
 
     stage('API & E2E (live stack)') {
+      options { timeout(time: 5, unit: 'MINUTES') }
       when { expression { params.RUN_E2E == true || env.LEAP_E2E_URL?.trim() } }
       steps {
         script {
