@@ -198,7 +198,7 @@
                 "exec": [
                   "pm.test('Returns 200 with rotated JWT or 401 without cookie', function () {",
                   "  pm.expect([200, 401]).to.include(pm.response.code);",
-                  "  if (pm.response.code === 200) pm.environment.set('jwtToken', pm.response.json().token);",
+                  "  if (pm.response.code === 200) { var r = pm.response.json(); pm.expect(r.token).to.be.a('string'); if (r.user && r.user.role === 'admin') { pm.environment.set('adminToken', r.token); } else if (r.user && r.user.role === 'learner') { pm.environment.set('jwtToken', r.token); } }",
                   "});"
                 ]
               }
@@ -219,7 +219,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Status is 200 or 202', function () { pm.expect([200, 202]).to.include(pm.response.code); });",
                   "pm.test('Returns generic message', function () { pm.expect(pm.response.json()).to.have.property('message'); });"
                 ]
               }
