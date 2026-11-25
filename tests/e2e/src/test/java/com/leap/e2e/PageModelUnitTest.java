@@ -25,9 +25,19 @@ class PageModelUnitTest {
 
   @Test
   void defaultConfigProvidesSensibleFallbacks() {
-    assertNotNull(E2EConfig.baseUrl());
-    assertTrue(E2EConfig.timeoutSeconds() > 0);
-    assertTrue(E2EConfig.isHeadless());
+    String prevHeadless = System.getProperty("leap.headless");
+    try {
+      System.clearProperty("leap.headless");
+      assertNotNull(E2EConfig.baseUrl());
+      assertTrue(E2EConfig.timeoutSeconds() > 0);
+      assertTrue(E2EConfig.isHeadless());
+    } finally {
+      if (prevHeadless == null) {
+        System.clearProperty("leap.headless");
+      } else {
+        System.setProperty("leap.headless", prevHeadless);
+      }
+    }
   }
 
   @Test
