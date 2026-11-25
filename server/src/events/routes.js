@@ -8,7 +8,7 @@ const {
   Interaction, ContentItem, LearnerProfile, LearningPath,
 } = require('../models');
 const { AppError, ah } = require('../middleware/error');
-const { jwtAuth, requireConsent } = require('../middleware/auth');
+const { jwtAuth, requireConsent, requirePermission } = require('../middleware/auth');
 const { updateMastery } = require('../path/mastery');
 const { refreshStatuses } = require('../path/sequencer');
 const { feedCache } = require('../recommendations/cache');
@@ -32,7 +32,7 @@ function validate(e, userId) {
   return null;
 }
 
-router.post('/events', jwtAuth, requireConsent, ah(async (req, res) => {
+router.post('/events', jwtAuth, requirePermission('events:write'), requireConsent, ah(async (req, res) => {
   const events = req.body?.events;
   if (!Array.isArray(events) || events.length === 0) {
     throw new AppError(400, 'VALIDATION_FAILED', 'events must be a non-empty array');
@@ -89,7 +89,7 @@ router.post('/events', jwtAuth, requireConsent, ah(async (req, res) => {
  */
 const PASS_MARK = 0.6;
 
-router.post('/catalogue/items/:id/attempt', jwtAuth, requireConsent, ah(async (req, res) => {
+router.post('/catalogue/items/:id/attempt', jwtAuth, requirePermission('events:write'), requireConsent, ah(async (req, res) => {
   const item = await ContentItem.findById(req.params.id).select('skills quiz title');
   if (!item?.quiz?.length) throw new AppError(404, 'NOT_A_QUIZ', 'This item has no quiz');
   const answers = req.body?.answers;

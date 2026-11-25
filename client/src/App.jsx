@@ -13,9 +13,9 @@ import Path from './pages/Path';
 import Progress from './pages/Progress';
 import { Analytics, ManageContent, Users } from './pages/Admin';
 
-/** Routes for each role. Learners are gated by consent, then onboarding. */
+/** Routes gated by DB-backed permissions. Learners are also gated by consent, then onboarding. */
 export default function App() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, can, loading } = useAuth();
 
   if (loading) return <Spinner />;
   if (!user) return window.location.pathname === '/reset-password' ? <ResetPassword /> : <Login />;
@@ -32,13 +32,13 @@ export default function App() {
         <Routes>
           <Route path="*" element={<Navigate to="/" replace />} />
           <Route path="/item/:id" element={<Item />} />
-          <Route path="/catalogue" element={<Catalogue />} />
-          {isLearner && <Route path="/path" element={<Path />} />}
-          {isLearner && <Route path="/progress" element={<Progress />} />}
-          <Route path="/" element={isLearner ? <Feed /> : <Navigate to="/admin" replace />} />
-          {!isLearner && <Route path="/admin" element={<Analytics />} />}
-          {!isLearner && <Route path="/admin/catalogue" element={<ManageContent />} />}
-          {user.role === 'admin' && <Route path="/admin/users" element={<Users />} />}
+          {can('catalogue:read') && <Route path="/catalogue" element={<Catalogue />} />}
+          {can('paths:write') && <Route path="/path" element={<Path />} />}
+          {can('progress:read') && <Route path="/progress" element={<Progress />} />}
+          <Route path="/" element={can('recommendations:read') ? <Feed /> : <Navigate to="/admin" replace />} />
+          {can('analytics:read') && <Route path="/admin" element={<Analytics />} />}
+          {can('catalogue:write') && <Route path="/admin/catalogue" element={<ManageContent />} />}
+          {can('users:read') && <Route path="/admin/users" element={<Users />} />}
         </Routes>
       </main>
     </>

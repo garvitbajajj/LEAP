@@ -3,12 +3,12 @@ const {
   User, ContentItem, Interaction, LearnerProfile, Recommendation, Feedback,
 } = require('../models');
 const { ah } = require('../middleware/error');
-const { jwtAuth, requireRole } = require('../middleware/auth');
+const { jwtAuth, requirePermission } = require('../middleware/auth');
 
 const router = express.Router();
 
 /** Engagement, mastery and recommendation-quality overview for instructors and admins. */
-router.get('/analytics/overview', jwtAuth, requireRole('instructor', 'admin'), ah(async (req, res) => {
+router.get('/analytics/overview', jwtAuth, requirePermission('analytics:read'), ah(async (req, res) => {
   const weekAgo = new Date(Date.now() - 7 * 86_400_000);
 
   const [learners, activeIds, published, eventsByType, topItems, masteryBySkill, recs, feedback] = await Promise.all([

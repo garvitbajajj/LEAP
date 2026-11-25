@@ -1,13 +1,13 @@
 const express = require('express');
 const { ContentItem } = require('../models');
 const { AppError, ah } = require('../middleware/error');
-const { jwtAuth, requireRole } = require('../middleware/auth');
+const { jwtAuth, requirePermission } = require('../middleware/auth');
 const { audit } = require('../admin/audit');
 const { findCycle } = require('./graph');
 const { validateImport } = require('./csvImport');
 
 const router = express.Router();
-const authorOnly = [jwtAuth, requireRole('instructor', 'admin')];
+const authorOnly = [jwtAuth, requirePermission('catalogue:write')];
 
 const EDITABLE = ['title', 'description', 'type', 'skills', 'prerequisites', 'difficulty',
   'durationMins', 'language', 'url', 'quiz'];

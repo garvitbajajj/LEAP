@@ -8,7 +8,7 @@ const {
   ContentItem, Interaction, LearnerProfile, Recommendation, Feedback,
 } = require('../models');
 const { AppError, ah } = require('../middleware/error');
-const { jwtAuth, requireConsent } = require('../middleware/auth');
+const { jwtAuth, requireConsent, requirePermission } = require('../middleware/auth');
 const { recommendationFallbacks } = require('../middleware/metrics');
 const { GOALS } = require('../path/goals');
 const mlClient = require('./mlClient');
@@ -50,7 +50,7 @@ function fallbackRank(candidates, goalSkills, limit) {
     }));
 }
 
-router.get('/recommendations', jwtAuth, requireConsent, ah(async (req, res) => {
+router.get('/recommendations', jwtAuth, requirePermission('recommendations:read'), requireConsent, ah(async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 12, 50);
   const userId = req.user.id;
 
@@ -145,7 +145,7 @@ router.get('/recommendations', jwtAuth, requireConsent, ah(async (req, res) => {
 }));
 
 // ---------------------------------------------------------------- feedback
-router.post('/feedback', jwtAuth, ah(async (req, res) => {
+router.post('/feedback', jwtAuth, requirePermission('recommendations:read'), ah(async (req, res) => {
   const { itemId, verdict, rating, comment } = req.body || {};
   if (!/^[a-f0-9]{24}$/.test(itemId || '')) throw new AppError(400, 'VALIDATION_FAILED', 'A valid itemId is required');
   if (verdict && !['relevant', 'not_relevant'].includes(verdict)) {

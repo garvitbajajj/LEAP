@@ -3,7 +3,7 @@ const {
   ContentItem, Interaction, LearnerProfile, LearningPath,
 } = require('../models');
 const { AppError, ah } = require('../middleware/error');
-const { jwtAuth, requireConsent } = require('../middleware/auth');
+const { jwtAuth, requireConsent, requirePermission } = require('../middleware/auth');
 const { GOALS } = require('./goals');
 const { buildPath, refreshStatuses, summarise } = require('./sequencer');
 
@@ -29,7 +29,7 @@ async function respond(res, path, userId, status = 200) {
   });
 }
 
-router.post('/paths', jwtAuth, requireConsent, ah(async (req, res) => {
+router.post('/paths', jwtAuth, requirePermission('paths:write'), requireConsent, ah(async (req, res) => {
   const profile = await LearnerProfile.findOne({ userId: req.user.id });
   const goal = req.body?.goal || profile?.goals?.[0];
   if (!GOALS[goal]) {
@@ -55,7 +55,7 @@ router.post('/paths', jwtAuth, requireConsent, ah(async (req, res) => {
   await respond(res, path, req.user.id, 201);
 }));
 
-router.get('/paths/active', jwtAuth, ah(async (req, res) => {
+router.get('/paths/active', jwtAuth, requirePermission('paths:write'), ah(async (req, res) => {
   const path = await LearningPath.findOne({ userId: req.user.id, status: { $in: ['active', 'completed'] } })
     .sort({ updatedAt: -1 })
     .populate('steps.itemId', STEP_FIELDS);
@@ -63,7 +63,7 @@ router.get('/paths/active', jwtAuth, ah(async (req, res) => {
   await respond(res, path, req.user.id);
 }));
 
-router.post('/paths/:id/steps/:stepId/:action(complete|skip)', jwtAuth, ah(async (req, res) => {
+router.post('/paths/:id/steps/:stepId/:action(complete|skip)', jwtAuth, requirePermission('paths:write'), ah(async (req, res) => {
   const path = await loadOwnPath(req);
   const step = path.steps.id(req.params.stepId);
   if (!step) throw new AppError(404, 'NOT_FOUND', 'Step not found');

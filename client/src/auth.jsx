@@ -8,6 +8,7 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [permissions, setPermissions] = useState([]);
   const [loading, setLoading] = useState(true);
 
   /** Forgets the session locally - used when the server has already rejected it. */
@@ -15,6 +16,7 @@ export function AuthProvider({ children }) {
     tokenStore.clear();
     setUser(null);
     setProfile(null);
+    setPermissions([]);
   }, []);
 
   /** User-initiated logout: revoke the refresh token on the server too. */
@@ -27,6 +29,7 @@ export function AuthProvider({ children }) {
     const me = await api('/me');
     setUser(me.user);
     setProfile(me.profile);
+    setPermissions(me.permissions || []);
     return me;
   }, []);
 
@@ -48,9 +51,11 @@ export function AuthProvider({ children }) {
   const loginWithOtp = useCallback((email, code) => api('/auth/otp/verify', { method: 'POST', body: { email, code, purpose: 'login_otp' } }).then(start), [start]);
   const register = useCallback((name, email, password) => api('/auth/register', { method: 'POST', body: { name, email, password } }).then(start), [start]);
 
+  const can = useCallback((perm) => permissions.includes('*') || permissions.includes(perm), [permissions]);
+
   const value = useMemo(() => ({
-    user, profile, loading, login, loginWithOtp, register, logout, refresh, setProfile,
-  }), [user, profile, loading, login, loginWithOtp, register, logout, refresh]);
+    user, profile, permissions, can, loading, login, loginWithOtp, register, logout, refresh, setProfile,
+  }), [user, profile, permissions, can, loading, login, loginWithOtp, register, logout, refresh]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
