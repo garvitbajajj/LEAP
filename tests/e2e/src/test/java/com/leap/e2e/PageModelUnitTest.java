@@ -57,6 +57,7 @@ class PageModelUnitTest {
 
   @Test
   void pageObjectsExposeNonNullExplicitLocators() {
+    assertNotNull(LoginPage.WELCOME_SIGN_IN_BTN);
     assertNotNull(LoginPage.EMAIL_INPUT);
     assertNotNull(LoginPage.PASSWORD_INPUT);
     assertNotNull(FeedPage.REC_CARDS);

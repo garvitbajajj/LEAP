@@ -4,16 +4,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.function.Supplier;
+import org.junit.jupiter.api.extension.AfterTestExecutionCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
-import org.junit.jupiter.api.extension.TestWatcher;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
 
 /**
- * Captures a PNG screenshot to target/screenshots/ whenever an E2E test fails.
+ * Captures a PNG screenshot to target/screenshots/ whenever an E2E test fails,
+ * before @AfterEach tears down the WebDriver session.
  */
-public class ScreenshotOnFailureExtension implements TestWatcher {
+public class ScreenshotOnFailureExtension implements AfterTestExecutionCallback {
   private final Supplier<WebDriver> driverSupplier;
 
   public ScreenshotOnFailureExtension(Supplier<WebDriver> driverSupplier) {
@@ -21,7 +22,10 @@ public class ScreenshotOnFailureExtension implements TestWatcher {
   }
 
   @Override
-  public void testFailed(ExtensionContext context, Throwable cause) {
+  public void afterTestExecution(ExtensionContext context) {
+    if (context.getExecutionException().isEmpty()) {
+      return;
+    }
     WebDriver driver = driverSupplier.get();
     if (!(driver instanceof TakesScreenshot shooter)) {
       return;

@@ -2,6 +2,7 @@ package com.leap.e2e.pages;
 
 import java.util.List;
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.Select;
@@ -17,12 +18,25 @@ public class CataloguePage extends BasePage {
 
   public CataloguePage open(String baseUrl) {
     driver.get(baseUrl + "/catalogue");
+    waitVisible(SEARCH_INPUT);
     waitAllVisible(CARD_TITLES);
     return this;
   }
 
   public void search(String query) {
-    type(SEARCH_INPUT, query);
+    WebElement input = waitClickable(SEARCH_INPUT);
+    input.click();
+    input.clear();
+    input.sendKeys(query);
+    if (!query.equals(input.getDomProperty("value"))) {
+      ((JavascriptExecutor) driver).executeScript(
+          "const el = arguments[0], val = arguments[1];"
+          + "const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;"
+          + "setter.call(el, val);"
+          + "el.dispatchEvent(new Event('input', { bubbles: true }));",
+          input, query
+      );
+    }
     waitUrlContains("q=" + query);
     waitAllVisible(CARD_TITLES);
   }

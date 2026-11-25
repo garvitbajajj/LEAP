@@ -11,6 +11,7 @@ public final class DriverFactory {
 
   public static WebDriver createChrome() {
     ChromeOptions options = new ChromeOptions();
+    options.setAcceptInsecureCerts(true);
     if (E2EConfig.isHeadless()) {
       options.addArguments("--headless=new");
     }

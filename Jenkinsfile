@@ -30,6 +30,7 @@ pipeline {
     booleanParam(name: 'PUSH_IMAGES', defaultValue: false, description: 'Push built images to Docker Hub (requires dockerhub credential)')
     booleanParam(name: 'RUN_SEED', defaultValue: false, description: 'Force re-seed demo data after deploy (WIPES the database, Atlas included)')
     booleanParam(name: 'USE_ATLAS', defaultValue: false, description: 'Deploy against MongoDB Atlas (requires leap-mongo-uri credential) instead of the bundled mongo container')
+    booleanParam(name: 'RUN_E2E', defaultValue: false, description: 'Run Newman API + Selenium E2E tests against https://localhost:8443 after Deploy')
   }
 
   options {
@@ -122,30 +123,6 @@ pipeline {
       }
     }
 
-    stage('API & E2E (live stack)') {
-      when { expression { env.LEAP_E2E_URL?.trim() } }
-      steps {
-        runNpx("--yes newman run postman/LEAP.postman_collection.json -e postman/LEAP.local.postman_environment.json --env-var \"baseUrl=${env.LEAP_E2E_URL}\" --env-var \"apiBase=${env.LEAP_E2E_URL}/api/v1\" --insecure --reporters cli,junit --reporter-junit-export postman/newman-report.xml")
-        dir('tests/e2e') {
-          script {
-            if (isUnix()) {
-              sh "mvn -B verify -Dleap.baseUrl=${env.LEAP_E2E_URL} -Dleap.headless=true"
-            } else {
-              bat """
-                @echo off
-                where mvn >nul 2>&1
-                if %ERRORLEVEL%==0 (
-                  call mvn -B verify -Dleap.baseUrl=${env.LEAP_E2E_URL} -Dleap.headless=true
-                ) else (
-                  call "C:\\Users\\abhil\\tools\\apache-maven-3.9.9\\bin\\mvn.cmd" -B verify -Dleap.baseUrl=${env.LEAP_E2E_URL} -Dleap.headless=true
-                )
-              """
-            }
-          }
-        }
-      }
-    }
-
     stage('Build') {
       steps { dir('client') { runNpm('run build') } }
     }
@@ -211,6 +188,31 @@ pipeline {
         }
         echo 'LEAP website is live at https://localhost:8443 (HTTP :8088 redirects to HTTPS)'
         echo 'Swagger UI: https://localhost:8443/api/v1/docs | ML Docs: http://localhost:8000/docs'
+      }
+    }
+
+    stage('API & E2E (live stack)') {
+      when { expression { params.RUN_E2E == true || env.LEAP_E2E_URL?.trim() } }
+      steps {
+        script {
+          def e2eUrl = env.LEAP_E2E_URL?.trim() ?: 'https://localhost:8443'
+          runNpx("--yes newman run postman/LEAP.postman_collection.json -e postman/LEAP.local.postman_environment.json --env-var \"baseUrl=${e2eUrl}\" --env-var \"apiBase=${e2eUrl}/api/v1\" --insecure --reporters cli,junit --reporter-junit-export postman/newman-report.xml")
+          dir('tests/e2e') {
+            if (isUnix()) {
+              sh "mvn -B verify -Dleap.baseUrl=${e2eUrl} -Dleap.headless=true"
+            } else {
+              bat """
+                @echo off
+                where mvn >nul 2>&1
+                if %ERRORLEVEL%==0 (
+                  call mvn -B verify -Dleap.baseUrl=${e2eUrl} -Dleap.headless=true
+                ) else (
+                  call "C:\\Users\\abhil\\tools\\apache-maven-3.9.9\\bin\\mvn.cmd" -B verify -Dleap.baseUrl=${e2eUrl} -Dleap.headless=true
+                )
+              """
+            }
+          }
+        }
       }
     }
   }

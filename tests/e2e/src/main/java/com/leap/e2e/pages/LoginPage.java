@@ -2,8 +2,10 @@ package com.leap.e2e.pages;
 
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.support.ui.ExpectedConditions;
 
 public class LoginPage extends BasePage {
+  public static final By WELCOME_SIGN_IN_BTN = By.xpath("//button[contains(.,'Sign in')]");
   public static final By NAME_INPUT = By.id("name");
   public static final By EMAIL_INPUT = By.id("email");
   public static final By PASSWORD_INPUT = By.id("password");
@@ -17,7 +19,14 @@ public class LoginPage extends BasePage {
 
   public LoginPage open(String baseUrl) {
     driver.get(baseUrl);
-    waitVisible(EMAIL_INPUT);
+    wait.until(ExpectedConditions.or(
+        ExpectedConditions.visibilityOfElementLocated(EMAIL_INPUT),
+        ExpectedConditions.visibilityOfElementLocated(WELCOME_SIGN_IN_BTN)
+    ));
+    if (driver.findElements(EMAIL_INPUT).isEmpty()) {
+      click(WELCOME_SIGN_IN_BTN);
+      waitVisible(EMAIL_INPUT);
+    }
     return this;
   }
 
