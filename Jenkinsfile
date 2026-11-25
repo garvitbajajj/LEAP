@@ -1,6 +1,7 @@
 // LEAP - single-branch (main) declarative CI/CD pipeline for Windows & Linux agents
 // Works with a standard Jenkins "Pipeline" job + GitHub webhook (/github-webhook/).
 // Optional credential: "dockerhub" (username/password) when PUSH_IMAGES is enabled.
+// Optional credential: "leap-mongo-uri" (secret text, Atlas connection string) when USE_ATLAS is enabled.
 
 def runCmd(String cmd) {
   if (isUnix()) {
@@ -27,7 +28,8 @@ pipeline {
 
   parameters {
     booleanParam(name: 'PUSH_IMAGES', defaultValue: false, description: 'Push built images to Docker Hub (requires dockerhub credential)')
-    booleanParam(name: 'RUN_SEED', defaultValue: false, description: 'Force re-seed demo data after deploy')
+    booleanParam(name: 'RUN_SEED', defaultValue: false, description: 'Force re-seed demo data after deploy (WIPES the database, Atlas included)')
+    booleanParam(name: 'USE_ATLAS', defaultValue: false, description: 'Deploy against MongoDB Atlas (requires leap-mongo-uri credential) instead of the bundled mongo container')
   }
 
   options {
@@ -180,25 +182,31 @@ pipeline {
 
     stage('Deploy') {
       steps {
-        runCmd('docker compose -p leap down --remove-orphans')
-        runCmd('docker compose -p leap build')
-        runCmd('docker compose -p leap up -d --wait mongo redis')
-        runCmd('docker compose -p leap up -d --wait ml')
-        runCmd('docker compose -p leap up -d --wait server client')
         script {
-          def rawOut = ''
-          if (isUnix()) {
-            rawOut = sh(script: 'docker compose -p leap exec -T mongo mongosh --quiet leap --eval "db.users.countDocuments()"', returnStdout: true)
-          } else {
-            rawOut = bat(script: '@docker compose -p leap exec -T mongo mongosh --quiet leap --eval "db.users.countDocuments()"', returnStdout: true)
+          def deploy = {
+            runCmd('docker compose -p leap down --remove-orphans')
+            runCmd('docker compose -p leap build')
+            runCmd('docker compose -p leap up -d --wait mongo redis')
+            runCmd('docker compose -p leap up -d --wait ml')
+            runCmd('docker compose -p leap up -d --wait server client')
+            if (params.USE_ATLAS) {
+              // The user count below reads the local mongo container, which is always empty
+              // when the app runs on Atlas - so on Atlas, seed only when explicitly asked.
+              if (params.RUN_SEED) {
+                echo 'Seeding MongoDB Atlas (RUN_SEED ticked)...'
+                runCmd('docker compose -p leap --profile seed run --rm seed')
+              } else {
+                echo 'Using MongoDB Atlas; seed skipped. Tick RUN_SEED to load demo data (it wipes Atlas).'
+              }
+            } else {
+              seedLocalIfEmpty()
+            }
           }
-          def lines = rawOut.readLines().findAll { it.trim() }
-          def userCount = lines ? lines[-1].trim() : '0'
-          if (params.RUN_SEED == true || userCount == '0') {
-            echo "Seeding LEAP database (RUN_SEED=${params.RUN_SEED}, existing users=${userCount})..."
-            runCmd('docker compose -p leap --profile seed run --rm seed')
+          if (params.USE_ATLAS) {
+            // Sets MONGO_URI for docker compose; Jenkins masks the value in the log.
+            withCredentials([string(credentialsId: 'leap-mongo-uri', variable: 'MONGO_URI')]) { deploy() }
           } else {
-            echo "Database already has ${userCount} user(s); skipping seed."
+            deploy()
           }
         }
         echo 'LEAP website is live at https://localhost:8443 (HTTP :8088 redirects to HTTPS)'
@@ -214,5 +222,23 @@ pipeline {
     }
     success { echo 'LEAP pipeline passed' }
     failure { echo 'LEAP pipeline failed - check the stage logs above' }
+  }
+}
+
+/** Seeds the bundled mongo container on first deploy (no users yet) or when RUN_SEED is ticked. */
+def seedLocalIfEmpty() {
+  def rawOut = ''
+  if (isUnix()) {
+    rawOut = sh(script: 'docker compose -p leap exec -T mongo mongosh --quiet leap --eval "db.users.countDocuments()"', returnStdout: true)
+  } else {
+    rawOut = bat(script: '@docker compose -p leap exec -T mongo mongosh --quiet leap --eval "db.users.countDocuments()"', returnStdout: true)
+  }
+  def lines = rawOut.readLines().findAll { it.trim() }
+  def userCount = lines ? lines[-1].trim() : '0'
+  if (params.RUN_SEED == true || userCount == '0') {
+    echo "Seeding LEAP database (RUN_SEED=${params.RUN_SEED}, existing users=${userCount})..."
+    runCmd('docker compose -p leap --profile seed run --rm seed')
+  } else {
+    echo "Database already has ${userCount} user(s); skipping seed."
   }
 }

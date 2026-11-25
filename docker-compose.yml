@@ -23,7 +23,7 @@ services:
     build: ./server
     restart: unless-stopped
     environment:
-      MONGO_URI: mongodb://mongo:27017/leap
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/leap}
       ML_URL: http://ml:8000
       ML_API_KEY: ${ML_API_KEY:-leap-dev-ml-key}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
@@ -87,7 +87,7 @@ services:
     profiles: ["seed"]
     command: ["node", "src/seed/seed.js"]
     environment:
-      MONGO_URI: mongodb://mongo:27017/leap
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/leap}
     depends_on:
       mongo:
         condition: service_healthy
